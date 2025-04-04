@@ -26,8 +26,8 @@ import (
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
 
-	nodeclasshash "github.com/sergelogvinov/karpenter-provider-proxmox/pkg/controllers/nodeclass/hash"
-	nodeclaasstatus "github.com/sergelogvinov/karpenter-provider-proxmox/pkg/controllers/nodeclass/status"
+	nodeclasshash "github.com/tufitko/karpenter-provider-yandex/pkg/controllers/nodeclass/hash"
+	nodeclaasstatus "github.com/tufitko/karpenter-provider-yandex/pkg/controllers/nodeclass/status"
 )
 
 func NewControllers(ctx context.Context, mgr manager.Manager, clk clock.Clock,

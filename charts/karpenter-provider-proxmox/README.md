@@ -1,22 +1,22 @@
-# karpenter-provider-proxmox
+# karpenter-provider-yandex
 
 ![Version: 0.0.1](https://img.shields.io/badge/Version-0.0.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v0.1.0](https://img.shields.io/badge/AppVersion-v0.1.0-informational?style=flat-square)
 
-Karpenter for Proxmox VE.
+Karpenter for Yandex Cloud.
 
-**Homepage:** <https://github.com/sergelogvinov/karpenter-provider-proxmox>
+**Homepage:** <https://github.com/tufitko/karpenter-provider-yandex>
 
 ## Maintainers
 
 | Name | Email | Url |
 | ---- | ------ | --- |
-| sergelogvinov |  | <https://github.com/sergelogvinov> |
+| tufitko |  | <https://github.com/tufitko> |
 
 ## Source Code
 
-* <https://github.com/sergelogvinov/karpenter-provider-proxmox>
+* <https://github.com/tufitko/karpenter-provider-yandex>
 
-## Proxmox permissions
+## Yandex permissions
 
 ```shell
 # Create role Karpenter
@@ -31,7 +31,7 @@ pveum user token add kubernetes-karpenter@pve karpenter -privsep 0
 ## Helm values example
 
 ```yaml
-# karpenter-provider-proxmox.yaml
+# karpenter-provider-yandex.yaml
 
 config:
   clusters:
@@ -53,7 +53,7 @@ tolerations:
 
 ```shell
 # Install Karpenter
-helm upgrade -i --namespace=kube-system -f karpenter-provider-proxmox.yaml \
-  karpenter-provider-proxmox oci://ghcr.io/sergelogvinov/charts/karpenter-provider-proxmox
+helm upgrade -i --namespace=kube-system -f karpenter-provider-yandex.yaml \
+  karpenter-provider-yandex oci://ghcr.io/tufitko/charts/karpenter-provider-yandex
 ```
 

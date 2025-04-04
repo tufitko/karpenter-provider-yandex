@@ -32,9 +32,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/sergelogvinov/karpenter-provider-proxmox/pkg/apis/v1alpha1"
-	"github.com/sergelogvinov/karpenter-provider-proxmox/pkg/providers/cloudcapacity"
-	"github.com/sergelogvinov/karpenter-provider-proxmox/pkg/providers/instance"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/apis/v1alpha1"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/cloudcapacity"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/instance"
 
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"

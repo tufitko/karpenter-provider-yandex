@@ -30,7 +30,7 @@ import (
 
 	"github.com/awslabs/operatorpkg/reasonable"
 
-	"github.com/sergelogvinov/karpenter-provider-proxmox/pkg/apis/v1alpha1"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/apis/v1alpha1"
 )
 
 // Controller computes a hash of the YandexNodeClass spec and stores it in the status

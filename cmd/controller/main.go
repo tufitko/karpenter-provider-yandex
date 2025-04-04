@@ -25,10 +25,10 @@ import (
 	"sigs.k8s.io/karpenter/pkg/controllers/state"
 	coreoperator "sigs.k8s.io/karpenter/pkg/operator"
 
-	yandex "github.com/sergelogvinov/karpenter-provider-proxmox/pkg/cloudprovider"
-	"github.com/sergelogvinov/karpenter-provider-proxmox/pkg/controllers"
-	"github.com/sergelogvinov/karpenter-provider-proxmox/pkg/providers/cloudcapacity"
-	"github.com/sergelogvinov/karpenter-provider-proxmox/pkg/providers/instance"
+	yandex "github.com/tufitko/karpenter-provider-yandex/pkg/cloudprovider"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/controllers"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/cloudcapacity"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/instance"
 )
 
 func main() {

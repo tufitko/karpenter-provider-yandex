@@ -20,7 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/scheme"
 
-	"github.com/sergelogvinov/karpenter-provider-proxmox/pkg/apis"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/apis"
 )
 
 var (

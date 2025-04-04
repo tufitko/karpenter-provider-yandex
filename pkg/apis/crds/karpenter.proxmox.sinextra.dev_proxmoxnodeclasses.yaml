@@ -4,20 +4,20 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
-  name: proxmoxnodeclasses.karpenter.proxmox.sinextra.dev
+  name: yandexnodeclasses.karpenter.yandex.sinextra.dev
 spec:
-  group: karpenter.proxmox.sinextra.dev
+  group: karpenter.yandex.sinextra.dev
   names:
-    kind: ProxmoxNodeClass
-    listKind: ProxmoxNodeClassList
-    plural: proxmoxnodeclasses
-    singular: proxmoxnodeclass
+    kind: yandexNodeClass
+    listKind: yandexNodeClassList
+    plural: yandexnodeclasses
+    singular: yandexnodeclass
   scope: Cluster
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ProxmoxNodeClass is the Schema for the ProxmoxNodeClass API
+        description: yandexNodeClass is the Schema for the yandexNodeClass API
         properties:
           apiVersion:
             description: |-
@@ -37,7 +37,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: Spec defines the desired state of ProxmoxNodeClass
+            description: Spec defines the desired state of yandexNodeClass
             properties:
               blockDevicesStorageID:
                 description: BlockDevicesStorageID is the storage ID to create/clone
@@ -78,7 +78,7 @@ spec:
                     type: string
                 type: object
               region:
-                description: Region is the Proxmox Cloud region where nodes will be
+                description: Region is the yandex Cloud region where nodes will be
                   created
                 type: string
               securityGroups:
@@ -94,7 +94,7 @@ spec:
                       pattern: net[0-9]+
                       type: string
                     name:
-                      description: Name is the security group name in Proxmox.
+                      description: Name is the security group name in yandex.
                       maxLength: 30
                       type: string
                   required:
@@ -120,7 +120,7 @@ spec:
             - template
             type: object
           status:
-            description: Status defines the observed state of ProxmoxNodeClass
+            description: Status defines the observed state of yandexNodeClass
             properties:
               conditions:
                 description: Conditions contains signals for health and readiness
@@ -192,7 +192,7 @@ spec:
                   type: string
                 type: array
               specHash:
-                description: SpecHash is a hash of the ProxmoxNodeClass spec
+                description: SpecHash is a hash of the yandexNodeClass spec
                 format: int64
                 type: integer
               validationError:

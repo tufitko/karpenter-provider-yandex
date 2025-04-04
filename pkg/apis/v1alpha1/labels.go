@@ -17,7 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"github.com/sergelogvinov/karpenter-provider-proxmox/pkg/apis"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/apis"
 
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 )

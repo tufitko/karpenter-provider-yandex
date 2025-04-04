@@ -22,8 +22,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sergelogvinov/karpenter-provider-proxmox/pkg/apis/v1alpha1"
-	"github.com/sergelogvinov/karpenter-provider-proxmox/pkg/providers/cloudcapacity"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/apis/v1alpha1"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/cloudcapacity"
 	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/api/resource"

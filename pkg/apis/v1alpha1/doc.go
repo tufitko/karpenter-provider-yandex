@@ -27,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
 
-	"github.com/sergelogvinov/karpenter-provider-proxmox/pkg/apis"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/apis"
 )
 
 func init() {

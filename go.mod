@@ -1,4 +1,4 @@
-module github.com/sergelogvinov/karpenter-provider-proxmox
+module github.com/tufitko/karpenter-provider-yandex
 
 go 1.23.5
 

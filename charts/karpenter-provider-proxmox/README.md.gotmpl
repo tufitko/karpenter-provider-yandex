@@ -14,7 +14,7 @@
 
 {{ template "chart.requirementsSection" . }}
 
-## Proxmox permissions
+## yandex permissions
 
 ```shell
 # Create role Karpenter
@@ -29,7 +29,7 @@ pveum user token add kubernetes-karpenter@pve karpenter -privsep 0
 ## Helm values example
 
 ```yaml
-# karpenter-provider-proxmox.yaml
+# karpenter-provider-yandex.yaml
 
 config:
   clusters:
@@ -51,8 +51,8 @@ tolerations:
 
 ```shell
 # Install Karpenter
-helm upgrade -i --namespace=kube-system -f karpenter-provider-proxmox.yaml \
-  karpenter-provider-proxmox oci://ghcr.io/sergelogvinov/charts/karpenter-provider-proxmox
+helm upgrade -i --namespace=kube-system -f karpenter-provider-yandex.yaml \
+  karpenter-provider-yandex oci://ghcr.io/tufitko/charts/karpenter-provider-yandex
 ```
 
 {{ template "chart.valuesSection" . }}

@@ -16,7 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - Go version: 1.20+
 - Line length: 200 characters max
-- Imports ordering: standard lib → default → github.com/sergelogvinov → k8s.io
+- Imports ordering: standard lib → default → github.com/tufitko → k8s.io
 - Error handling: Return errors with context using fmt.Errorf("doing X, %w", err)
 - Logging: Use structured logging with WithName() and WithValues()
 - Code complexity: Keep cyclomatic complexity below 30
