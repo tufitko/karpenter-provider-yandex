@@ -198,7 +198,7 @@ func createOfferings(cloudcapacityProvider *cloudcapacity.Provider, instanceType
 		available := cloudcapacityProvider.Fit(zone, instanceType.Capacity)
 		
 		// Create base requirements
-		requirements := []scheduling.Requirement{
+		requirements := []*scheduling.Requirement{
 			scheduling.NewRequirement(corev1.LabelInstanceTypeStable, corev1.NodeSelectorOpIn, instanceType.Name),
 			scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, zone),
 			scheduling.NewRequirement(karpv1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, karpv1.CapacityTypeOnDemand),

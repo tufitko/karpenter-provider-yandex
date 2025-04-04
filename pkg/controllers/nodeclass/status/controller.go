@@ -38,7 +38,7 @@ const (
 	ConditionTypeAutoPlacement = "AutoPlacement"
 )
 
-// Controller reconciles an ProxmoxNodeClass object to update its status
+// Controller reconciles an YandexNodeClass object to update its status
 type Controller struct {
 	kubeClient client.Client
 }
@@ -59,7 +59,7 @@ func (c *Controller) Name() string {
 
 // Reconcile executes a control loop for the resource
 func (c *Controller) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
-	nc := &v1alpha1.ProxmoxNodeClass{}
+	nc := &v1alpha1.YandexNodeClass{}
 	if err := c.kubeClient.Get(ctx, req.NamespacedName, nc); err != nil {
 		return reconcile.Result{}, client.IgnoreNotFound(err)
 	}
@@ -94,7 +94,7 @@ func (c *Controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	}
 
 	if nc.Status.ValidationError == "" && len(nc.Status.SelectedInstanceTypes) == 0 {
-		nc.Status.SelectedInstanceTypes = []string{"t2.micro", "t3.micro"}
+		nc.Status.SelectedInstanceTypes = []string{"s2.2vcpu.8gb", "s2.4vcpu.16gb"}
 
 		nc.StatusConditions().SetTrue(status.ConditionReady)
 
@@ -107,17 +107,29 @@ func (c *Controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	return reconcile.Result{}, nil
 }
 
-// validateNodeClass performs validation of the ProxmoxNodeClass configuration
-func (c *Controller) validateNodeClass(_ context.Context, nc *v1alpha1.ProxmoxNodeClass) error {
-	if nc.Spec.Template == "" {
-		return fmt.Errorf("Template is required")
+// validateNodeClass performs validation of the YandexNodeClass configuration
+func (c *Controller) validateNodeClass(_ context.Context, nc *v1alpha1.YandexNodeClass) error {
+	if nc.Spec.CloudID == "" {
+		return fmt.Errorf("CloudID is required")
+	}
+	
+	if nc.Spec.FolderID == "" {
+		return fmt.Errorf("FolderID is required")
+	}
+	
+	if nc.Spec.NetworkID == "" {
+		return fmt.Errorf("NetworkID is required")
+	}
+	
+	if nc.Spec.ImageID == "" {
+		return fmt.Errorf("ImageID is required")
 	}
 
 	return nil
 }
 
 // updateCondition updates a condition in the nodeclass status
-func (c *Controller) updateCondition(nodeClass *v1alpha1.ProxmoxNodeClass, conditionType string, status metav1.ConditionStatus, reason, message string) {
+func (c *Controller) updateCondition(nodeClass *v1alpha1.YandexNodeClass, conditionType string, status metav1.ConditionStatus, reason, message string) {
 	now := metav1.Now()
 	newCondition := metav1.Condition{
 		Type:               conditionType,
@@ -146,7 +158,7 @@ func (c *Controller) updateCondition(nodeClass *v1alpha1.ProxmoxNodeClass, condi
 func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 	return controllerruntime.NewControllerManagedBy(m).
 		Named(c.Name()).
-		For(&v1alpha1.ProxmoxNodeClass{}).
+		For(&v1alpha1.YandexNodeClass{}).
 		WithOptions(controller.Options{
 			RateLimiter:             reasonable.RateLimiter(),
 			MaxConcurrentReconciles: 1,

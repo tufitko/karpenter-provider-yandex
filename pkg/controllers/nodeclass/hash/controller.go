@@ -33,7 +33,7 @@ import (
 	"github.com/sergelogvinov/karpenter-provider-proxmox/pkg/apis/v1alpha1"
 )
 
-// Controller computes a hash of the ProxmoxNodeClass spec and stores it in the status
+// Controller computes a hash of the YandexNodeClass spec and stores it in the status
 type Controller struct {
 	kubeClient client.Client
 }
@@ -54,7 +54,7 @@ func (c *Controller) Name() string {
 
 // Reconcile executes a control loop for the resource
 func (c *Controller) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
-	nc := &v1alpha1.ProxmoxNodeClass{}
+	nc := &v1alpha1.YandexNodeClass{}
 	if err := c.kubeClient.Get(ctx, req.NamespacedName, nc); err != nil {
 		return reconcile.Result{}, client.IgnoreNotFound(err)
 	}

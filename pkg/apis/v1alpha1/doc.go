@@ -14,12 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package v1alpha1 describe ProxmoxNodeClass CRD
+// Package v1alpha1 describe YandexNodeClass CRD
 //
 // +k8s:openapi-gen=true
 // +k8s:deepcopy-gen=package,register
 // +k8s:defaulter-gen=TypeMeta
-// +groupName=karpenter.proxmox.sinextra.dev
+// +groupName=karpenter.yandex.cloud
 package v1alpha1
 
 import (
@@ -34,7 +34,7 @@ func init() {
 	gv := schema.GroupVersion{Group: apis.Group, Version: "v1alpha1"}
 	corev1.AddToGroupVersion(scheme.Scheme, gv)
 	scheme.Scheme.AddKnownTypes(gv,
-		&ProxmoxNodeClass{},
-		&ProxmoxNodeClassList{},
+		&YandexNodeClass{},
+		&YandexNodeClassList{},
 	)
 }
