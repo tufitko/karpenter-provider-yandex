@@ -13,8 +13,8 @@
 # limitations under the License.
 
 REGISTRY ?= ghcr.io
-USERNAME ?= sergelogvinov
-PROJECT ?= karpenter-provider-proxmox
+USERNAME ?= tufitko
+PROJECT ?= karpenter-provider-yandex
 IMAGE ?= $(REGISTRY)/$(USERNAME)/$(PROJECT)
 HELMREPO ?= $(REGISTRY)/$(USERNAME)/charts
 PLATFORM ?= linux/arm64,linux/amd64

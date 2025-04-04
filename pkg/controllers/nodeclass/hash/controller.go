@@ -85,7 +85,7 @@ func (c *Controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 	return controllerruntime.NewControllerManagedBy(m).
 		Named(c.Name()).
-		For(&v1alpha1.ProxmoxNodeClass{}).
+		For(&v1alpha1.YandexNodeClass{}).
 		WithEventFilter(predicate.NewPredicateFuncs(func(object client.Object) bool {
 			return true // Only reconcile on spec changes
 		})).
