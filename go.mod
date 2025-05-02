@@ -1,15 +1,16 @@
 module github.com/tufitko/karpenter-provider-yandex
 
 go 1.23.5
+toolchain go1.24.1
 
 require (
 	github.com/awslabs/operatorpkg v0.0.0-20250204024900-5fbad4f6c503
 	github.com/go-logr/logr v1.4.2
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/samber/lo v1.49.1
-	k8s.io/api v0.32.1
-	k8s.io/apimachinery v0.32.1
-	k8s.io/client-go v0.32.1
+	k8s.io/api v0.32.3
+	k8s.io/apimachinery v0.32.3
+	k8s.io/client-go v0.32.3
 	k8s.io/utils v0.0.0-20241210054802-24370beab758
 	sigs.k8s.io/controller-runtime v0.20.1
 	sigs.k8s.io/karpenter v1.2.0
