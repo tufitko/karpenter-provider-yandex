@@ -114,7 +114,6 @@ type SubnetSelectorTerm struct {
 	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
 	// ID is the subnet id in Yandex Cloud
-	// +kubebuilder:validation:Pattern="subnet-[0-9a-z]+"
 	// +optional
 	ID string `json:"id,omitempty"`
 }

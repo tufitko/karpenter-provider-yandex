@@ -131,6 +131,9 @@ func (p *YCSDK) CreateFixedNodeGroup(
 
 	labels = maps.Clone(labels)
 	labels["managed-by"] = "karpenter"
+	for k, v := range nodeLabels {
+		labels[k] = strings.ToLower(v)
+	}
 
 	op, err := p.SDK.WrapOperation(p.SDK.Kubernetes().NodeGroup().Create(ctx, &k8s.CreateNodeGroupRequest{
 		ClusterId:   p.clusterID,
@@ -165,7 +168,9 @@ func (p *YCSDK) CreateFixedNodeGroup(
 				},
 			},
 			NetworkSettings: &k8s.NodeTemplate_NetworkSettings{
-				Type: k8s.NodeTemplate_NetworkSettings_SOFTWARE_ACCELERATED,
+				Type: lo.If(coreFraction == CoreFraction100,
+					k8s.NodeTemplate_NetworkSettings_SOFTWARE_ACCELERATED,
+				).Else(k8s.NodeTemplate_NetworkSettings_STANDARD),
 			},
 			ContainerRuntimeSettings: &k8s.NodeTemplate_ContainerRuntimeSettings{
 				Type: k8s.NodeTemplate_ContainerRuntimeSettings_CONTAINERD,

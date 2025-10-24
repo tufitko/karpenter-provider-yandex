@@ -83,7 +83,6 @@ func (p *DefaultProvider) createOfferings(
 	itName := yandex.InstanceType{}
 	_ = itName.FromString(it.Name)
 
-	var cachedOfferings []*cloudprovider.Offering
 	for zone := range allZones {
 		for _, capacityType := range it.Requirements.Get(karpv1.CapacityTypeLabelKey).Values() {
 			var price float64
@@ -104,7 +103,7 @@ func (p *DefaultProvider) createOfferings(
 				Price:     price,
 				Available: hasPrice && itZones.Has(zone),
 			}
-			cachedOfferings = append(cachedOfferings, offering)
+			offerings = append(offerings, offering)
 		}
 	}
 

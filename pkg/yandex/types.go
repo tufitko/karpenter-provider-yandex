@@ -64,24 +64,24 @@ func (r *InstanceType) FromString(str string) error {
 	}
 
 	// Parse platform
-	r.Platform = PlatformId(parts[1])
+	r.Platform = PlatformId(parts[0])
 
 	// Parse CPU - parts[2]
-	cpu, err := resource.ParseQuantity(parts[2])
+	cpu, err := resource.ParseQuantity(parts[1])
 	if err != nil {
 		return fmt.Errorf("failed to parse CPU quantity: %w", err)
 	}
 	r.CPU = cpu
 
 	// Parse Memory - parts[3]
-	memory, err := resource.ParseQuantity(parts[3])
+	memory, err := resource.ParseQuantity(parts[2])
 	if err != nil {
 		return fmt.Errorf("failed to parse Memory quantity: %w", err)
 	}
 	r.Memory = memory
 
 	// Parse CoreFraction
-	fractionStr := parts[4]
+	fractionStr := parts[3]
 	fraction, err := strconv.ParseInt(fractionStr, 10, 64)
 	if err != nil {
 		return fmt.Errorf("failed to parse CoreFraction: %w", err)

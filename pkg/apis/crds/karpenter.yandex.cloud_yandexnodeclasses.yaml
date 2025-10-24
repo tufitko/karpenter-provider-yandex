@@ -114,7 +114,6 @@ spec:
                   properties:
                     id:
                       description: ID is the subnet id in Yandex Cloud
-                      pattern: subnet-[0-9a-z]+
                       type: string
                     labels:
                       additionalProperties:

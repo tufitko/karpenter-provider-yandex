@@ -1,0 +1,32 @@
+apiVersion: karpenter.yandex.cloud/v1alpha1
+kind: YandexNodeClass
+metadata:
+  name: andrei
+spec:
+  # Subnet selection - required field
+  subnetSelectorTerms:
+    - id: e2l6qif2jopueimb715k
+  
+  # VM configuration
+  platform: standard-v3
+  diskType: network-ssd
+  diskSize: 30Gi
+  
+  # Allow preemptible instances for cost savings
+  can_be_preemptible: true
+  
+  # Security groups
+  securityGroups:
+    - enpenr1r620jjqfprn26
+    - enpv2qa1qkvj8sp9mco9
+  
+  # Labels applied to VMs in Yandex Cloud
+  labels:
+    environment: development
+    team: SRE
+    role: andrei
+  
+  # Additional labels applied to Kubernetes nodes
+  nodeLabels:
+    role: andrei
+    team: SRE

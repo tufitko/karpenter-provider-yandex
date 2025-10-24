@@ -74,13 +74,19 @@ type CloudProvider struct {
 func NewCloudProvider(ctx context.Context,
 	kubeClient client.Client,
 	sdk yandex.SDK,
+	recorder events.Recorder,
+	instanceTypes instancetype.Provider,
+	subnets subnet.Provider,
 ) (*CloudProvider, error) {
 	log := log.FromContext(ctx).WithName(CloudProviderName)
 	log.WithName("NewCloudProvider()")
 	provider := &CloudProvider{
-		kubeClient: kubeClient,
-		sdk:        sdk,
-		log:        log,
+		kubeClient:    kubeClient,
+		sdk:           sdk,
+		log:           log,
+		recorder:      recorder,
+		instanceTypes: instanceTypes,
+		subnets:       subnets,
 	}
 	return provider, nil
 }

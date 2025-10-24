@@ -39,7 +39,14 @@ func main() {
 	log := op.GetLogger()
 	log.Info("Karpenter Yandex Cloud Provider version", "version", coreoperator.Version)
 
-	yandexCloudProvider, err := yandex.NewCloudProvider(ctx, op.GetClient(), op.SDK)
+	yandexCloudProvider, err := yandex.NewCloudProvider(
+		ctx,
+		op.GetClient(),
+		op.SDK,
+		op.EventRecorder,
+		op.InstanceTypeProvider,
+		op.SubnetProvider,
+	)
 	if err != nil {
 		log.Error(err, "failed creating yandex provider")
 		os.Exit(1)

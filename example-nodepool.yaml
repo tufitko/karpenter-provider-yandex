@@ -1,0 +1,49 @@
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: andrei
+spec:
+  # Disruption configuration
+  disruption:
+    budgets:
+      - nodes: 50%
+        reasons:
+          - Empty
+      - nodes: 10%
+        reasons:
+          - Underutilized
+      - nodes: "0"
+        reasons:
+          - Drifted
+    consolidateAfter: 0s
+    consolidationPolicy: WhenEmptyOrUnderutilized
+
+  # Node template configuration
+  template:
+    metadata:
+      labels:
+        environment: development
+        managed-by-karpenter: "true"
+        region: ru-central-1
+        role: andrei
+        team: SRE
+    
+    spec:
+      # Reference to YandexNodeClass
+      nodeClassRef:
+        group: karpenter.yandex.cloud
+        kind: YandexNodeClass
+        name: andrei
+      
+      # Node requirements and constraints
+      requirements:
+        # Instance type constraints
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand", "spot"]
+
+      # Node expiration
+      expireAfter: 168h  # 7 days
+      
+      # Graceful termination period
+      terminationGracePeriod: 5m
