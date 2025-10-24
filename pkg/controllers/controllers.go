@@ -20,31 +20,21 @@ import (
 	"context"
 
 	"github.com/awslabs/operatorpkg/controller"
-	"k8s.io/utils/clock"
+	"github.com/patrickmn/go-cache"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/controllers/nodeclass"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/subnet"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
-
-	nodeclasshash "github.com/tufitko/karpenter-provider-yandex/pkg/controllers/nodeclass/hash"
-	nodeclaasstatus "github.com/tufitko/karpenter-provider-yandex/pkg/controllers/nodeclass/status"
 )
 
-func NewControllers(ctx context.Context, mgr manager.Manager, clk clock.Clock,
+func NewControllers(ctx context.Context,
 	kubeClient client.Client, recorder events.Recorder,
-	cloudProvider cloudprovider.CloudProvider,
+	subnetProvider subnet.Provider,
+	validationCache *cache.Cache,
 ) []controller.Controller {
 
-	controllers := make([]controller.Controller, 0)
-
-	// Add nodeclass hash controller
-	if hashCtrl, err := nodeclasshash.NewController(kubeClient); err == nil {
-		controllers = append(controllers, hashCtrl)
-	}
-
-	// Add nodeclass status controller
-	if statusCtrl, err := nodeclaasstatus.NewController(kubeClient); err == nil {
-		controllers = append(controllers, statusCtrl)
+	controllers := []controller.Controller{
+		nodeclass.NewController(kubeClient, recorder, subnetProvider, validationCache, false),
 	}
 
 	return controllers

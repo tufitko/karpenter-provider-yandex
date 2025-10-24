@@ -33,3 +33,6 @@ go.work.sum
 /kubeconfig*
 /cloud.yaml
 #
+
+.idea
+.vscode

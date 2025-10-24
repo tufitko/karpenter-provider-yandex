@@ -20,6 +20,19 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"sort"
+	"time"
+
+	"github.com/tufitko/karpenter-provider-yandex/pkg/apis"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/instancetype"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/subnet"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/yandex"
+	"github.com/yandex-cloud/go-genproto/yandex/cloud/k8s/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/karpenter/pkg/events"
+
 	"strings"
 
 	"github.com/awslabs/operatorpkg/status"
@@ -33,9 +46,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/tufitko/karpenter-provider-yandex/pkg/apis/v1alpha1"
-	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/cloudcapacity"
-	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/instance"
-
+	cloudproviderevents "github.com/tufitko/karpenter-provider-yandex/pkg/cloudprovider/events"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
@@ -43,33 +54,35 @@ import (
 )
 
 const (
-	CloudProviderName  = "yandex"
+	CloudProviderName    = "yandex"
 	YandexProviderPrefix = "yandex://"
 )
 
+var _ cloudprovider.CloudProvider = (*CloudProvider)(nil)
+
 type CloudProvider struct {
-	kubeClient            client.Client
-	instanceTypes         []*cloudprovider.InstanceType
-	instanceProvider      *instance.Provider
-	cloudcapacityProvider *cloudcapacity.Provider
-	log                   logr.Logger
+	kubeClient client.Client
+	recorder   events.Recorder
+	log        logr.Logger
+
+	instanceTypes instancetype.Provider
+	subnets       subnet.Provider
+
+	sdk yandex.SDK
 }
 
 func NewCloudProvider(ctx context.Context,
 	kubeClient client.Client,
-	instanceTypes []*cloudprovider.InstanceType,
-	instanceProvider *instance.Provider,
-	cloudcapacityProvider *cloudcapacity.Provider) *CloudProvider {
+	sdk yandex.SDK,
+) (*CloudProvider, error) {
 	log := log.FromContext(ctx).WithName(CloudProviderName)
-	log.WithName("NewCloudProvider()").Info("Executed with params", "instanceTypes", instanceTypes)
-
-	return &CloudProvider{
-		kubeClient:            kubeClient,
-		instanceTypes:         instanceTypes,
-		instanceProvider:      instanceProvider,
-		cloudcapacityProvider: cloudcapacityProvider,
-		log:                   log,
+	log.WithName("NewCloudProvider()")
+	provider := &CloudProvider{
+		kubeClient: kubeClient,
+		sdk:        sdk,
+		log:        log,
 	}
+	return provider, nil
 }
 
 // Create launches a NodeClaim with the given resource requests and requirements and returns a hydrated
@@ -78,13 +91,15 @@ func (c CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 	log := c.log.WithName("Create()")
 	log.Info("Executed with params", "nodePool", nodeClaim.Name, "spec", nodeClaim.Spec)
 
-	if nodeClaim == nil {
-		return nil, cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("nodeClaim is nil"))
-	}
-
 	nodeClass, err := c.resolveNodeClassFromNodeClaim(ctx, nodeClaim)
 	if err != nil {
-		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("resolving node class, %w", err))
+		if errors.IsNotFound(err) {
+			// We treat a failure to resolve the NodeClass as an ICE since this means there is no capacity possibilities for this NodeClaim
+			c.recorder.Publish(cloudproviderevents.NodeClaimFailedToResolveNodeClass(nodeClaim))
+			return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("resolving nodeclass, %w", err))
+		}
+		// Transient error when resolving the NodeClass
+		return nil, fmt.Errorf("resolving nodeclass, %w", err)
 	}
 
 	instanceTypes, err := c.resolveInstanceTypes(ctx, nodeClaim, nodeClass)
@@ -98,14 +113,58 @@ func (c CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 
 	log.Info("Successfully resolved instance types", "count", len(instanceTypes))
 
-	node, err := c.instanceProvider.Create(ctx, nodeClaim, nodeClass, instanceTypes)
+	it := instanceTypes[0]
+
+	reqs := scheduling.NewNodeSelectorRequirementsWithMinValues(nodeClaim.Spec.Requirements...)
+	subnets, err := c.subnets.List(ctx, nodeClass)
+	if err != nil {
+		return nil, fmt.Errorf("listing subnets, %w", err)
+	}
+	zoneToSubnet := lo.SliceToMap(subnets, func(s subnet.Subnet) (string, subnet.Subnet) {
+		return s.ZoneID, s
+	})
+	zoneToAvailabeIPs := lo.SliceToMap(subnets, func(s subnet.Subnet) (string, int) {
+		return s.ZoneID, s.AvailableIPAddressCount
+	})
+
+	offering := it.Offerings.Compatible(reqs).Available().Cheapest()
+	for _, off := range it.Offerings.Compatible(reqs).Available() {
+		if zoneToAvailabeIPs[offering.Zone()] < zoneToAvailabeIPs[off.Zone()] {
+			offering = off
+		}
+	}
+
+	var yait yandex.InstanceType
+	if err = yait.FromString(it.Name); err != nil {
+		return nil, fmt.Errorf("parse instance type name: %w", err)
+	}
+
+	nodeGroupId, err := c.sdk.CreateFixedNodeGroup(
+		ctx,
+		nodeClaim.Name,
+		nodeClass.Spec.Labels,
+		nodeClass.Spec.NodeLabels,
+		yait.Platform,
+		yait.CoreFraction,
+		yait.CPU,
+		yait.Memory,
+		offering.CapacityType() == karpv1.CapacityTypeSpot,
+		offering.Zone(),
+		zoneToSubnet[offering.Zone()].ID,
+		nodeClass.Spec.SecurityGroups,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("creating instance, %w", err)
 	}
 
-	log.Info("Successfully created instance", "providerID", node.Spec.ProviderID)
+	log.Info("Successfully created instance", "providerID", nodeGroupId)
 
-	return c.nodeToNodeClaim(ctx, node)
+	ng, err := c.sdk.GetNodeGroup(ctx, nodeGroupId)
+	if err != nil {
+		return nil, fmt.Errorf("getting node group, %w", err)
+	}
+
+	return c.nodeGroupToNodeClaim(ctx, ng, it), nil
 }
 
 // Delete removes a NodeClaim from the cloudprovider by its provider id. Delete should return
@@ -113,20 +172,15 @@ func (c CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 // Karpenter will keep retrying until Delete returns a NodeClaimNotFound error.
 func (c CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim) error {
 	log := c.log.WithName("Delete()")
-	log.Info("Executed with params", "nodePool", nodeClaim.Name)
+	log.Info("Executed with params", "nodeClaim", nodeClaim.Name)
 
-	if nodeClaim == nil {
-		return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("nodeClaim is nil"))
-	}
-
-	providerID := nodeClaim.Status.ProviderID
-	if providerID == "" {
-		log.Info("providerID is empty")
-
+	nodeGroupId := nodeClaim.Labels[v1alpha1.LabelNodeGroupId]
+	if nodeGroupId == "" {
+		log.Info("nodeGroupId is empty")
 		return nil
 	}
 
-	return c.instanceProvider.Delete(ctx, nodeClaim)
+	return c.sdk.DeleteNodeGroup(ctx, nodeGroupId)
 }
 
 // Get retrieves a NodeClaim from the cloudprovider by its provider id
@@ -142,43 +196,29 @@ func (c CloudProvider) Get(ctx context.Context, providerID string) (*karpv1.Node
 		return nil, fmt.Errorf("providerID does not have the correct prefix")
 	}
 
-	node, err := c.instanceProvider.Get(ctx, providerID)
+	ng, err := c.sdk.GetNodeGroupByProviderId(ctx, providerID)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			return nil, cloudprovider.NewNodeClaimNotFoundError(err)
-		}
-
-		return nil, fmt.Errorf("getting instance, %w", err)
+		return nil, fmt.Errorf("getting node group, %w", err)
 	}
 
-	return c.nodeToNodeClaim(ctx, node)
+	return c.nodeGroupToNodeClaim(ctx, ng, c.nodeGroupToInstanceType(ctx, ng)), nil
 }
 
 // List retrieves all NodeClaims from the cloudprovider
 func (c CloudProvider) List(ctx context.Context) ([]*karpv1.NodeClaim, error) {
 	log := c.log.WithName("List()")
 
-	nodeList := &corev1.NodeList{}
-	if err := c.kubeClient.List(ctx, nodeList); err != nil {
+	ngs, err := c.sdk.ListNodeGroups(ctx)
+	if err != nil {
 		return nil, fmt.Errorf("listing nodes, %w", err)
 	}
 
 	var nodeClaims []*karpv1.NodeClaim
-	for i, node := range nodeList.Items {
-		if !strings.HasPrefix(node.Spec.ProviderID, YandexProviderPrefix) {
-			continue
-		}
-
-		nc, err := c.nodeToNodeClaim(ctx, &nodeList.Items[i])
-		if err != nil {
-			return nil, fmt.Errorf("converting nodeclaim, %w", err)
-		}
-
-		nodeClaims = append(nodeClaims, nc)
+	for _, ng := range ngs {
+		nodeClaims = append(nodeClaims, c.nodeGroupToNodeClaim(ctx, ng, c.nodeGroupToInstanceType(ctx, ng)))
 	}
 
 	log.V(1).Info("Successfully retrieved node claims list", "count", len(nodeClaims))
-
 	return nodeClaims, nil
 }
 
@@ -187,48 +227,17 @@ func (c CloudProvider) List(ctx context.Context) ([]*karpv1.NodeClaim, error) {
 // availability, the GetInstanceTypes method should always return all instance types,
 // even those with no offerings available.
 func (c CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *karpv1.NodePool) ([]*cloudprovider.InstanceType, error) {
-	log := c.log.WithName("GetInstanceTypes()")
-
-	nodeClass := &v1alpha1.YandexNodeClass{}
-	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: nodePool.Spec.Template.Spec.NodeClassRef.Name}, nodeClass); err != nil {
-		if errors.IsNotFound(err) {
-			log.Error(err, "Failed to resolve nodeClass")
-		}
-		return nil, err
-	}
-
-	c.cloudcapacityProvider.Sync(ctx)
-	instanceTypes, err := ConstructInstanceTypes(ctx, c.cloudcapacityProvider)
+	nodeClass, err := c.resolveNodeClassFromNodePool(ctx, nodePool)
 	if err != nil {
-		return nil, fmt.Errorf("constructing instance types, %w", err)
+		return nil, fmt.Errorf("resolving nodeClass, %w", err)
 	}
 
-	c.instanceTypes = instanceTypes
-
-	log.V(1).Info("Resolved instance types", "nodePool", nodePool.Name, "nodeclass", nodeClass.Name, "count", len(c.instanceTypes))
-
-	return c.instanceTypes, nil
+	return c.instanceTypes.List(ctx, nodeClass)
 }
 
 // IsDrifted returns whether a NodeClaim has drifted from the provisioning requirements
 // it is tied to.
-func (c CloudProvider) IsDrifted(ctx context.Context, nodeClaim *karpv1.NodeClaim) (cloudprovider.DriftReason, error) {
-	log := c.log.WithName("IsDrifted()")
-	log.Info("Executed with params", "nodeClaim", nodeClaim.Name)
-
-	if nodeClaim == nil {
-		return "", cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("nodeClaim is nil"))
-	}
-
-	if nodeClaim.Spec.NodeClassRef == nil {
-		return "", nil
-	}
-
-	_, err := c.resolveNodeClassFromNodeClaim(ctx, nodeClaim)
-	if err != nil {
-		return "", cloudprovider.NewInsufficientCapacityError(fmt.Errorf("resolving node class, %w", err))
-	}
-
+func (c CloudProvider) IsDrifted(_ context.Context, _ *karpv1.NodeClaim) (cloudprovider.DriftReason, error) {
 	return "", nil
 }
 
@@ -243,31 +252,166 @@ func (c CloudProvider) Name() string {
 	return CloudProviderName
 }
 
-// GetSupportedNodeClasses returns CloudProvider NodeClass that implements status.Object
-// NOTE: It returns a list where the first element should be the default NodeClass
 func (c CloudProvider) GetSupportedNodeClasses() []status.Object {
 	return []status.Object{&v1alpha1.YandexNodeClass{}}
 }
 
-func (c *CloudProvider) resolveNodeClassFromNodeClaim(ctx context.Context, nodeClaim *karpv1.NodeClaim) (*v1alpha1.YandexNodeClass, error) {
+func (c CloudProvider) resolveNodeClassFromNodeClaim(ctx context.Context, nodeClaim *karpv1.NodeClaim) (*v1alpha1.YandexNodeClass, error) {
 	nodeClass := &v1alpha1.YandexNodeClass{}
 	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: nodeClaim.Spec.NodeClassRef.Name}, nodeClass); err != nil {
 		return nil, err
 	}
-
 	// For the purposes of NodeClass CloudProvider resolution, we treat deleting NodeClasses as NotFound
 	if !nodeClass.DeletionTimestamp.IsZero() {
-		return nil, errors.NewNotFound(v1alpha1.SchemeGroupVersion.WithResource("yandexnodeclass").GroupResource(), nodeClass.Name)
+		// For the purposes of NodeClass CloudProvider resolution, we treat deleting NodeClasses as NotFound,
+		// but we return a different error message to be clearer to users
+		return nil, newTerminatingNodeClassError(nodeClass.Name)
 	}
-
 	return nodeClass, nil
 }
 
-func (c *CloudProvider) resolveInstanceTypes(_ context.Context, nodeClaim *karpv1.NodeClaim, _ *v1alpha1.YandexNodeClass) ([]*cloudprovider.InstanceType, error) {
+func (c CloudProvider) resolveInstanceTypes(ctx context.Context, nodeClaim *karpv1.NodeClaim, class *v1alpha1.YandexNodeClass) ([]*cloudprovider.InstanceType, error) {
+	types, err := c.instanceTypes.List(ctx, class)
+	if err != nil {
+		return nil, err
+	}
+
 	reqs := scheduling.NewNodeSelectorRequirementsWithMinValues(nodeClaim.Spec.Requirements...)
 
-	return lo.Filter(c.instanceTypes, func(i *cloudprovider.InstanceType, _ int) bool {
+	types = lo.Filter(types, func(i *cloudprovider.InstanceType, _ int) bool {
 		return len(i.Offerings.Compatible(reqs).Available()) > 0 &&
 			resources.Fits(nodeClaim.Spec.Resources.Requests, i.Allocatable())
-	}), nil
+	})
+
+	sort.Slice(types, func(i, j int) bool {
+		return types[i].Offerings.Compatible(reqs).Available().Cheapest().Price < types[j].Offerings.Compatible(reqs).Available().Cheapest().Price
+	})
+
+	return types, nil
+}
+
+func (c CloudProvider) nodeGroupToNodeClaim(ctx context.Context, ng *k8s.NodeGroup, instanceType *cloudprovider.InstanceType) *karpv1.NodeClaim {
+	nodeClaim := &karpv1.NodeClaim{}
+	labels := map[string]string{}
+	annotations := map[string]string{}
+
+	if instanceType != nil {
+		for key, req := range instanceType.Requirements {
+			if req.Len() == 1 {
+				labels[key] = req.Values()[0]
+			}
+		}
+		resourceFilter := func(n corev1.ResourceName, v resource.Quantity) bool {
+			if resources.IsZero(v) {
+				return false
+			}
+			return true
+		}
+		nodeClaim.Status.Capacity = lo.PickBy(instanceType.Capacity, resourceFilter)
+		nodeClaim.Status.Allocatable = lo.PickBy(instanceType.Allocatable(), resourceFilter)
+	}
+	labels[corev1.LabelTopologyZone] = ng.GetAllocationPolicy().GetLocations()[0].GetZoneId()
+
+	labels[karpv1.CapacityTypeLabelKey] = lo.If(
+		ng.GetNodeTemplate().GetSchedulingPolicy().Preemptible,
+		karpv1.CapacityTypeSpot,
+	).Else(karpv1.CapacityTypeOnDemand)
+
+	if v, ok := ng.Labels[karpv1.NodePoolLabelKey]; ok {
+		labels[karpv1.NodePoolLabelKey] = v
+	}
+
+	labels[v1alpha1.LabelNodeGroupId] = ng.Id
+	nodeClaim.Labels = labels
+	nodeClaim.Annotations = annotations
+	nodeClaim.CreationTimestamp = metav1.Time{Time: ng.CreatedAt.AsTime()}
+
+	if lo.Contains(
+		[]k8s.NodeGroup_Status{
+			k8s.NodeGroup_STOPPING,
+			k8s.NodeGroup_STOPPED,
+			k8s.NodeGroup_DELETING,
+		},
+		ng.Status,
+	) {
+		nodeClaim.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+	}
+
+	if providerID, err := c.sdk.ProviderIdFor(ctx, ng.Id); err == nil {
+		nodeClaim.Status.ProviderID = providerID
+	}
+
+	return nodeClaim
+}
+
+func (c CloudProvider) nodeGroupToInstanceType(_ context.Context, ng *k8s.NodeGroup) *cloudprovider.InstanceType {
+	var yait yandex.InstanceType
+	yait.Platform = yandex.PlatformId(ng.GetNodeTemplate().GetPlatformId())
+	yait.CoreFraction = yandex.CoreFraction(ng.GetNodeTemplate().GetResourcesSpec().GetCoreFraction())
+	yait.CPU = *resource.NewQuantity(ng.GetNodeTemplate().GetResourcesSpec().GetCores(), resource.DecimalSI)
+	yait.Memory = *resource.NewQuantity(ng.GetNodeTemplate().GetResourcesSpec().GetMemory(), resource.BinarySI)
+
+	requirements := scheduling.NewRequirements()
+
+	// Zone requirement
+	if locations := ng.GetAllocationPolicy().GetLocations(); len(locations) > 0 {
+		zones := lo.Map(locations, func(loc *k8s.NodeGroupLocation, _ int) string {
+			return loc.GetZoneId()
+		})
+		requirements.Add(scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, zones...))
+	}
+
+	// Capacity type requirement
+	capacityType := karpv1.CapacityTypeOnDemand
+	if ng.GetNodeTemplate().GetSchedulingPolicy().GetPreemptible() {
+		capacityType = karpv1.CapacityTypeSpot
+	}
+	requirements.Add(scheduling.NewRequirement(karpv1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, capacityType))
+
+	// Platform requirements
+	requirements.Add(scheduling.NewRequirement(corev1.LabelInstanceTypeStable, corev1.NodeSelectorOpIn, ng.GetNodeTemplate().GetPlatformId()))
+	requirements.Add(scheduling.NewRequirement(corev1.LabelArchStable, corev1.NodeSelectorOpIn, "amd64"))
+	requirements.Add(scheduling.NewRequirement(corev1.LabelOSStable, corev1.NodeSelectorOpIn, string(corev1.Linux)))
+
+	return &cloudprovider.InstanceType{
+		Name: yait.String(),
+		Capacity: corev1.ResourceList{
+			corev1.ResourceCPU:              yait.CPU,
+			corev1.ResourceMemory:           yait.Memory,
+			corev1.ResourceEphemeralStorage: *resource.NewQuantity(ng.GetNodeTemplate().GetBootDiskSpec().GetDiskSize(), resource.BinarySI),
+		},
+		Requirements: requirements,
+	}
+}
+
+func (c CloudProvider) resolveNodePoolFromNodeGroup(ctx context.Context, ng *k8s.NodeGroup) (*karpv1.NodePool, error) {
+	if nodePoolName, ok := ng.Labels[karpv1.NodePoolLabelKey]; ok {
+		nodePool := &karpv1.NodePool{}
+		if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: nodePoolName}, nodePool); err != nil {
+			return nil, err
+		}
+		return nodePool, nil
+	}
+	return nil, errors.NewNotFound(schema.GroupResource{Group: apis.Group, Resource: "nodepools"}, "")
+}
+
+func (c CloudProvider) resolveNodeClassFromNodePool(ctx context.Context, nodePool *karpv1.NodePool) (*v1alpha1.YandexNodeClass, error) {
+	nodeClass := &v1alpha1.YandexNodeClass{}
+	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: nodePool.Spec.Template.Spec.NodeClassRef.Name}, nodeClass); err != nil {
+		return nil, err
+	}
+	if !nodeClass.DeletionTimestamp.IsZero() {
+		// For the purposes of NodeClass CloudProvider resolution, we treat deleting NodeClasses as NotFound,
+		// but we return a different error message to be clearer to users
+		return nil, newTerminatingNodeClassError(nodeClass.Name)
+	}
+	return nodeClass, nil
+}
+
+// newTerminatingNodeClassError returns a NotFound error for handling by
+func newTerminatingNodeClassError(name string) *errors.StatusError {
+	qualifiedResource := schema.GroupResource{Group: apis.Group, Resource: "ec2nodeclasses"}
+	err := errors.NewNotFound(qualifiedResource, name)
+	err.ErrStatus.Message = fmt.Sprintf("%s %q is terminating, treating as not found", qualifiedResource.String(), name)
+	return err
 }

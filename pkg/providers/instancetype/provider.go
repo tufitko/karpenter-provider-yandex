@@ -1,0 +1,78 @@
+package instancetype
+
+//go:generate go run tools/config_gen.go ru
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/tufitko/karpenter-provider-yandex/pkg/apis/v1alpha1"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/instancetype/offering"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/yandex"
+	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"sigs.k8s.io/karpenter/pkg/cloudprovider"
+)
+
+type Provider interface {
+	List(ctx context.Context, class *v1alpha1.YandexNodeClass) ([]*cloudprovider.InstanceType, error)
+}
+
+type DefaultProvider struct {
+	configuration    map[yandex.PlatformId][]InstanceConfiguration
+	offeringProvider *offering.DefaultProvider
+	resolver         Resolver
+	allZones         sets.Set[string]
+}
+
+func NewDefaultProvider(resolver Resolver, offeringProvider *offering.DefaultProvider, allZones sets.Set[string]) *DefaultProvider {
+	return &DefaultProvider{
+		configuration:    ruAvailableConfigurations,
+		resolver:         resolver,
+		offeringProvider: offeringProvider,
+		allZones:         allZones,
+	}
+}
+
+func (p *DefaultProvider) List(ctx context.Context, class *v1alpha1.YandexNodeClass) ([]*cloudprovider.InstanceType, error) {
+	if class == nil {
+		return nil, fmt.Errorf("node class is required")
+	}
+
+	res := make([]*cloudprovider.InstanceType, 0)
+	for platform := range p.configuration {
+		types, err := p.generateTypesFor(ctx, platform, class)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, types...)
+	}
+	return res, nil
+}
+
+func (p *DefaultProvider) generateTypesFor(ctx context.Context, platform yandex.PlatformId, class *v1alpha1.YandexNodeClass) ([]*cloudprovider.InstanceType, error) {
+	res := make([]*cloudprovider.InstanceType, 0)
+	for _, configuration := range p.configuration[platform] {
+		types := p.generateInstanceTypes(platform, configuration)
+
+		for _, t := range types {
+			res = append(res, p.resolver.Resolve(ctx, t, class))
+		}
+	}
+	return p.offeringProvider.InjectOfferings(ctx, res, p.allZones), nil
+}
+
+func (p *DefaultProvider) generateInstanceTypes(platform yandex.PlatformId, configuration InstanceConfiguration) []yandex.InstanceType {
+	res := make([]yandex.InstanceType, 0)
+	for _, cpu := range configuration.VCPU {
+		for _, memPerCore := range configuration.MemoryPerCore {
+			res = append(res, yandex.InstanceType{
+				Platform:     platform,
+				CoreFraction: configuration.CoreFraction,
+				CPU:          resource.MustParse(fmt.Sprintf("%d", cpu)),
+				Memory:       resource.MustParse(fmt.Sprintf("%fGi", memPerCore*float64(cpu))),
+			})
+		}
+	}
+	return res
+}

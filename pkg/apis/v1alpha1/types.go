@@ -18,8 +18,75 @@ package v1alpha1
 
 import (
 	"github.com/awslabs/operatorpkg/status"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+const (
+	ConditionTypeSubnetsReady        = "SubnetsReady"
+	ConditionTypeSecurityGroupsReady = "SecurityGroupsReady"
+	ConditionTypeValidationSucceeded = "ValidationSucceeded"
+)
+
+// YandexNodeClassSpec is the specification for a YandexNodeClass
+type YandexNodeClassSpec struct {
+	// Platform is the platform of the nodes
+	// Default is "standard-v3"
+	// +kubebuilder:validation:Enum:=standard-v1;standard-v2;standard-v3
+	// +kubebuilder:default=standard-v3
+	// +optional
+	Platform string `json:"platform"`
+
+	// CanBePreemptible determines if the nodes can be preemptible
+	// By default, nodes are not preemptible
+	// +kubebuilder:default=false
+	// +optional
+	CanBePreemptible *bool `json:"can_be_preemptible,omitempty"`
+
+	// CoreFractions is the list of core fractions to use for the nodes
+	// If not specified, the default core fraction of 100% will be used
+	// +optional
+	CoreFractions []CoreFraction `json:"core_fractions,omitempty"`
+
+	// SubnetSelectorTerms is a list of subnet selector terms. The terms are ORed.
+	// +kubebuilder:validation:XValidation:message="subnetSelectorTerms cannot be empty",rule="self.size() != 0"
+	// +kubebuilder:validation:XValidation:message="expected at least one, got none, ['labels', 'id']",rule="self.all(x, has(x.labels) || has(x.id))"
+	// +kubebuilder:validation:XValidation:message="'id' is mutually exclusive, cannot be set with a combination of other fields in a subnet selector term",rule="!self.all(x, has(x.id) && has(x.labels))"
+	// +kubebuilder:validation:MaxItems:=30
+	// +required
+	SubnetSelectorTerms []SubnetSelectorTerm `json:"subnetSelectorTerms" hash:"ignore"`
+
+	// DiskType is the type of disk to create
+	// Valid values are:
+	// - "network-hdd"
+	// - "network-ssd" (default)
+	// - "network-ssd-nonreplicated"
+	// +optional
+	// +kubebuilder:validation:Enum=network-hdd;network-ssd;network-ssd-nonreplicated
+	// +kubebuilder:default=network-ssd
+	DiskType string `json:"diskType,omitempty"`
+
+	// DiskSize is the size of the booted disk
+	// +optional
+	// +kubebuilder:default="30Gi"
+	DiskSize resource.Quantity `json:"diskSize,omitempty"`
+
+	// Labels to apply to the VMs
+	// +optional
+	Labels map[string]string `json:"labels,omitempty"`
+
+	// NodeLabels is additional labels on node
+	// +optional
+	NodeLabels map[string]string `json:"nodeLabels,omitempty"`
+
+	// SecurityGroups to apply to the VMs
+	// +optional
+	SecurityGroups []string `json:"securityGroups,omitempty"`
+}
+
+// CoreFraction is a string representation of a core fraction
+// +kubebuilder:validation:Enum=5;20;50;100
+type CoreFraction string
 
 // YandexNodeClass is the Schema for the YandexNodeClass API
 // +kubebuilder:object:root=true
@@ -37,6 +104,21 @@ type YandexNodeClass struct {
 	Status YandexNodeClassStatus `json:"status,omitempty"`
 }
 
+// SubnetSelectorTerm defines selection logic for a subnet used by Karpenter to launch nodes.
+// If multiple fields are used for selection, the requirements are ANDed.
+type SubnetSelectorTerm struct {
+	// Tags is a map of key/value tags used to select subnets
+	// Specifying '*' for a value selects all values for a given tag key.
+	// +kubebuilder:validation:XValidation:message="empty label keys or values aren't supported",rule="self.all(k, k != '' && self[k] != '')"
+	// +kubebuilder:validation:MaxProperties:=20
+	// +optional
+	Labels map[string]string `json:"labels,omitempty"`
+	// ID is the subnet id in Yandex Cloud
+	// +kubebuilder:validation:Pattern="subnet-[0-9a-z]+"
+	// +optional
+	ID string `json:"id,omitempty"`
+}
+
 // PlacementStrategy defines how nodes should be placed across zones
 type PlacementStrategy struct {
 	// ZoneBalance determines how nodes are distributed across zones
@@ -49,67 +131,6 @@ type PlacementStrategy struct {
 	ZoneBalance string `json:"zoneBalance,omitempty"`
 }
 
-// YandexNodeClassSpec defines the desired state of YandexNodeClass
-type YandexNodeClassSpec struct {
-	// CloudID is the Yandex Cloud ID where nodes will be created
-	// +required
-	CloudID string `json:"cloudID"`
-
-	// FolderID is the Yandex Cloud folder ID where nodes will be created
-	// +required
-	FolderID string `json:"folderID"`
-
-	// Zone is the availability zone where nodes will be created
-	// If not specified, zones will be automatically selected based on placement strategy
-	// +optional
-	Zone string `json:"zone,omitempty"`
-
-	// NetworkID is the ID of the network for the VM
-	// +required
-	NetworkID string `json:"networkID"`
-
-	// SubnetID is the ID of the subnet for the VM
-	// If not specified, a subnet in the selected zone will be automatically selected
-	// +optional
-	SubnetID string `json:"subnetID,omitempty"`
-
-	// DiskType is the type of disk to create
-	// Valid values are:
-	// - "network-hdd" (default)
-	// - "network-ssd"
-	// - "network-ssd-nonreplicated"
-	// +optional
-	// +kubebuilder:validation:Enum=network-hdd;network-ssd;network-ssd-nonreplicated
-	// +kubebuilder:default=network-hdd
-	DiskType string `json:"diskType,omitempty"`
-
-	// DiskSize is the size of the disk in GB
-	// +optional
-	// +kubebuilder:default=100
-	DiskSize int `json:"diskSize,omitempty"`
-
-	// ImageID is the ID of the VM image to use
-	// +required
-	ImageID string `json:"imageID"`
-
-	// PlacementStrategy defines how nodes should be placed across zones
-	// Only used when Zone or Subnet is not specified
-	// +optional
-	PlacementStrategy *PlacementStrategy `json:"placementStrategy,omitempty"`
-
-	// Labels to apply to the VMs
-	// +optional
-	Labels map[string]string `json:"labels,omitempty"`
-
-	// MetadataOptions for the generated launch template of provisioned nodes.
-	// +optional
-	MetadataOptions *MetadataOptions `json:"metadataOptions,omitempty"`
-
-	// SecurityGroups to apply to the VMs
-	// +optional
-	SecurityGroups []string `json:"securityGroups,omitempty"`
-}
-
 // MetadataOptions contains parameters for specifying VM metadata
 type MetadataOptions struct {
 	// UserData is base64-encoded user-data to be made available to the instance
@@ -119,6 +140,11 @@ type MetadataOptions struct {
 
 // YandexNodeClassStatus defines the observed state of YandexNodeClass
 type YandexNodeClassStatus struct {
+	// Subnets contains the current subnet values that are available to the
+	// cluster under the subnet selectors.
+	// +optional
+	Subnets []Subnet `json:"subnets,omitempty"`
+
 	// SpecHash is a hash of the YandexNodeClass spec
 	// +optional
 	SpecHash uint64 `json:"specHash,omitempty"`
@@ -181,6 +207,16 @@ func (in *YandexNodeClass) SetConditions(conditions []status.Condition) {
 	}
 
 	in.Status.Conditions = metav1Conditions
+}
+
+// Subnet contains resolved Subnet selector values utilized for node launch
+type Subnet struct {
+	// ID of the subnet
+	// +required
+	ID string `json:"id"`
+	// The associated availability zone ID
+	// +optional
+	ZoneID string `json:"zoneID,omitempty"`
 }
 
 // YandexNodeClassList contains a list of YandexNodeClass

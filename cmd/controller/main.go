@@ -18,8 +18,10 @@ limitations under the License.
 package main
 
 import (
+	"flag"
 	"os"
 
+	"github.com/tufitko/karpenter-provider-yandex/pkg/operator"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider/metrics"
 	corecontrollers "sigs.k8s.io/karpenter/pkg/controllers"
 	"sigs.k8s.io/karpenter/pkg/controllers/state"
@@ -27,37 +29,21 @@ import (
 
 	yandex "github.com/tufitko/karpenter-provider-yandex/pkg/cloudprovider"
 	"github.com/tufitko/karpenter-provider-yandex/pkg/controllers"
-	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/cloudcapacity"
-	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/instance"
 )
 
 func main() {
-	ctx, op := coreoperator.NewOperator()
-	log := op.GetLogger()
+	flag.Parse()
 
+	ctx, op := operator.NewOperator(coreoperator.NewOperator())
+
+	log := op.GetLogger()
 	log.Info("Karpenter Yandex Cloud Provider version", "version", coreoperator.Version)
 
-	cloudcapacityProvider, err := cloudcapacity.NewProvider(ctx)
+	yandexCloudProvider, err := yandex.NewCloudProvider(ctx, op.GetClient(), op.SDK)
 	if err != nil {
-		log.Error(err, "failed creating cloudcapacity provider")
+		log.Error(err, "failed creating yandex provider")
 		os.Exit(1)
 	}
-
-	cloudcapacityProvider.Sync(ctx)
-
-	instanceTypes, err := yandex.ConstructInstanceTypes(ctx, cloudcapacityProvider)
-	if err != nil {
-		log.Error(err, "failed constructing instance types")
-		os.Exit(1)
-	}
-
-	instanceProvider, err := instance.NewProvider(cloudcapacityProvider)
-	if err != nil {
-		log.Error(err, "failed creating instance provider")
-		os.Exit(1)
-	}
-
-	yandexCloudProvider := yandex.NewCloudProvider(ctx, op.GetClient(), instanceTypes, instanceProvider, cloudcapacityProvider)
 	cloudProvider := metrics.Decorate(yandexCloudProvider)
 	clusterState := state.NewCluster(op.Clock, op.GetClient(), cloudProvider)
 
@@ -73,11 +59,10 @@ func main() {
 		)...).
 		WithControllers(ctx, controllers.NewControllers(
 			ctx,
-			op.Manager,
-			op.Clock,
 			op.GetClient(),
 			op.EventRecorder,
-			cloudProvider,
+			op.SubnetProvider,
+			op.ValidationCache,
 		)...).
 		Start(ctx)
 }

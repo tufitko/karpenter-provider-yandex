@@ -24,15 +24,13 @@ import (
 
 const (
 	// Labels that can be selected on and are propagated to the node
-	LabelInstanceFamily       = apis.Group + "/instance-family"        // s1, s2, c1, c2, m1, m2, g1, g2
-	LabelInstanceCPUPlatform  = apis.Group + "/instance-cpu-platform"  // intel-cascade-lake, intel-ice-lake, etc
-	LabelInstanceGPUType      = apis.Group + "/instance-gpu-type"      // nvidia-tesla-v100, nvidia-tesla-a100, etc
-	LabelInstanceGPUCount     = apis.Group + "/instance-gpu-count"     // 1, 2, 4, 8
-	LabelInstanceCPU          = apis.Group + "/instance-cpu"           // 2, 4, 8, 16, 32, 64, 128
-	LabelInstanceMemory       = apis.Group + "/instance-memory"        // 1Gi, 2Gi, 4Gi, 8Gi, 16Gi, 32Gi, 64Gi, 128Gi
-
-	// github.com/awslabs/eks-node-viewer label so that it shows up.
-	LabelNodeViewer = "eks-node-viewer/instance-price"
+	LabelInstanceFamily      = apis.Group + "/instance-family"       // s1, s2, c1, c2, m1, m2, g1, g2
+	LabelInstanceCPUPlatform = apis.Group + "/instance-cpu-platform" // intel-cascade-lake, intel-ice-lake, etc
+	LabelInstanceGPUType     = apis.Group + "/instance-gpu-type"     // nvidia-tesla-v100, nvidia-tesla-a100, etc
+	LabelInstanceGPUCount    = apis.Group + "/instance-gpu-count"    // 1, 2, 4, 8
+	LabelInstanceCPU         = apis.Group + "/instance-cpu"          // 2, 4, 8, 16, 32, 64, 128
+	LabelInstanceMemory      = apis.Group + "/instance-memory"       // 1Gi, 2Gi, 4Gi, 8Gi, 16Gi, 32Gi, 64Gi, 128Gi
+	LabelNodeGroupId         = apis.Group + "/node-group-id"
 
 	// Internal labels that are propagated to the node
 	YandexLabelKey   = apis.Group + "/node"
