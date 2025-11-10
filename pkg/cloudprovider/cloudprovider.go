@@ -170,7 +170,7 @@ func (c CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 		return nil, fmt.Errorf("getting node group, %w", err)
 	}
 
-	return c.nodeGroupToNodeClaim(ctx, ng, it), nil
+	return c.nodeGroupToNodeClaim(ctx, ng, it)
 }
 
 // Delete removes a NodeClaim from the cloudprovider by its provider id. Delete should return
@@ -207,7 +207,7 @@ func (c CloudProvider) Get(ctx context.Context, providerID string) (*karpv1.Node
 		return nil, fmt.Errorf("getting node group, %w", err)
 	}
 
-	return c.nodeGroupToNodeClaim(ctx, ng, c.nodeGroupToInstanceType(ctx, ng)), nil
+	return c.nodeGroupToNodeClaim(ctx, ng, c.nodeGroupToInstanceType(ctx, ng))
 }
 
 // List retrieves all NodeClaims from the cloudprovider
@@ -221,7 +221,13 @@ func (c CloudProvider) List(ctx context.Context) ([]*karpv1.NodeClaim, error) {
 
 	var nodeClaims []*karpv1.NodeClaim
 	for _, ng := range ngs {
-		nodeClaims = append(nodeClaims, c.nodeGroupToNodeClaim(ctx, ng, c.nodeGroupToInstanceType(ctx, ng)))
+		var nc *karpv1.NodeClaim
+		nc, err = c.nodeGroupToNodeClaim(ctx, ng, c.nodeGroupToInstanceType(ctx, ng))
+		if err != nil {
+			log.Error(err, "failed to find node group", "nodeGroup", ng.Name)
+		} else {
+			nodeClaims = append(nodeClaims, nc)
+		}
 	}
 
 	log.V(1).Info("Successfully retrieved node claims list", "count", len(nodeClaims))
@@ -296,7 +302,9 @@ func (c CloudProvider) resolveInstanceTypes(ctx context.Context, nodeClaim *karp
 	return types, nil
 }
 
-func (c CloudProvider) nodeGroupToNodeClaim(ctx context.Context, ng *k8s.NodeGroup, instanceType *cloudprovider.InstanceType) *karpv1.NodeClaim {
+const waitForProviderIDTTL = 5 * time.Minute
+
+func (c CloudProvider) nodeGroupToNodeClaim(ctx context.Context, ng *k8s.NodeGroup, instanceType *cloudprovider.InstanceType) (*karpv1.NodeClaim, error) {
 	nodeClaim := &karpv1.NodeClaim{}
 	labels := map[string]string{}
 	annotations := map[string]string{}
@@ -343,11 +351,25 @@ func (c CloudProvider) nodeGroupToNodeClaim(ctx context.Context, ng *k8s.NodeGro
 		nodeClaim.DeletionTimestamp = &metav1.Time{Time: time.Now()}
 	}
 
-	if providerID, err := c.sdk.ProviderIdFor(ctx, ng.Id); err == nil {
-		nodeClaim.Status.ProviderID = providerID
+	var lastErr error
+	nodeClaim.Status.ProviderID, lastErr = c.sdk.ProviderIdFor(ctx, ng.Id)
+	if (ng.Status == k8s.NodeGroup_PROVISIONING || ng.Status == k8s.NodeGroup_STARTING) && lastErr != nil {
+		start := time.Now()
+		var providerID string
+		for ; time.Since(start) < waitForProviderIDTTL; time.Sleep(time.Second) {
+			providerID, lastErr = c.sdk.ProviderIdFor(ctx, ng.Id)
+			if lastErr == nil {
+				nodeClaim.Status.ProviderID = providerID
+				break
+			}
+		}
 	}
 
-	return nodeClaim
+	if nodeClaim.Status.ProviderID == "" {
+		return nil, fmt.Errorf("failed to determine provider id: %w", lastErr)
+	}
+
+	return nodeClaim, nil
 }
 
 func (c CloudProvider) nodeGroupToInstanceType(_ context.Context, ng *k8s.NodeGroup) *cloudprovider.InstanceType {
