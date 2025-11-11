@@ -217,6 +217,13 @@ func (c CloudProvider) Get(ctx context.Context, providerID string) (*karpv1.Node
 
 	ng, err := c.sdk.GetNodeGroupByProviderId(ctx, providerID)
 	if err != nil {
+		// Check if this is a NotFound error (instance/nodegroup not found)
+		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "NotFound") {
+			log.Info("NodeGroup/Instance not found", "providerID", providerID)
+			// Return NodeClaimNotFoundError to signal that the instance is already terminated
+			return nil, cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("instance %s not found", providerID))
+		}
+		// Return other errors as-is for retry
 		return nil, fmt.Errorf("getting node group, %w", err)
 	}
 
@@ -414,6 +421,14 @@ func (c CloudProvider) nodeGroupToInstanceType(_ context.Context, ng *k8s.NodeGr
 	requirements.Add(scheduling.NewRequirement(corev1.LabelArchStable, corev1.NodeSelectorOpIn, "amd64"))
 	requirements.Add(scheduling.NewRequirement(corev1.LabelOSStable, corev1.NodeSelectorOpIn, string(corev1.Linux)))
 
+	// Create offerings for this instance type
+	offering := &cloudprovider.Offering{
+		Requirements:        requirements,
+		Price:               0.0, // Price not available from NodeGroup
+		Available:           true,
+		ReservationCapacity: 0,
+	}
+
 	return &cloudprovider.InstanceType{
 		Name: yait.String(),
 		Capacity: corev1.ResourceList{
@@ -422,6 +437,7 @@ func (c CloudProvider) nodeGroupToInstanceType(_ context.Context, ng *k8s.NodeGr
 			corev1.ResourceEphemeralStorage: *resource.NewQuantity(ng.GetNodeTemplate().GetBootDiskSpec().GetDiskSize(), resource.BinarySI),
 		},
 		Requirements: requirements,
+		Offerings:    cloudprovider.Offerings{offering},
 	}
 }
 

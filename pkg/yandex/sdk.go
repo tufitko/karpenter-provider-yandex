@@ -12,7 +12,6 @@ import (
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/k8s/v1"
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/vpc/v1"
 	ycsdk "github.com/yandex-cloud/go-sdk"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 )

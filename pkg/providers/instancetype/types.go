@@ -87,6 +87,7 @@ func NewInstanceType(
 		Name:         info.String(),
 		Requirements: computeRequirements(info, nodeClass),
 		Capacity:     computeCapacity(ctx, info, nodeClass.Spec.DiskSize, maxPods),
+		Offerings:    cloudprovider.Offerings{}, // Initialize empty offerings to prevent panic
 		Overhead: &cloudprovider.InstanceTypeOverhead{
 			KubeReserved:      kubeReservedResources(info.CPU, info.Memory),
 			SystemReserved:    corev1.ResourceList{},
