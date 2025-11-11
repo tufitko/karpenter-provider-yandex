@@ -183,10 +183,23 @@ func (c CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 	nodeGroupId := nodeClaim.Labels[v1alpha1.LabelNodeGroupId]
 	if nodeGroupId == "" {
 		log.Info("nodeGroupId is empty")
-		return nil
+		return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("nodeGroupId is empty for nodeclaim %s", nodeClaim.Name))
 	}
 
-	return c.sdk.DeleteNodeGroup(ctx, nodeGroupId)
+	err := c.sdk.DeleteNodeGroup(ctx, nodeGroupId)
+	if err != nil {
+		// Check if this is a NotFound error (NodeGroup already deleted by another NodeClaim)
+		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "NotFound") {
+			log.Info("NodeGroup already deleted", "nodeGroupId", nodeGroupId)
+			// Return NodeClaimNotFoundError to signal that the instance is already terminated
+			return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("nodegroup %s not found", nodeGroupId))
+		}
+		// Return other errors as-is for retry
+		return err
+	}
+
+	log.Info("Successfully deleted NodeGroup", "nodeGroupId", nodeGroupId)
+	return nil
 }
 
 // Get retrieves a NodeClaim from the cloudprovider by its provider id
