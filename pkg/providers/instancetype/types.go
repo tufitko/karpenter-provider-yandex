@@ -117,7 +117,6 @@ func computeRequirements(
 		scheduling.NewRequirement(corev1.LabelInstanceTypeStable, corev1.NodeSelectorOpIn, string(info.Platform)),
 		scheduling.NewRequirement(corev1.LabelInstanceType, corev1.NodeSelectorOpIn, string(info.Platform)),
 		scheduling.NewRequirement(corev1.LabelArchStable, corev1.NodeSelectorOpIn, "amd64"),
-		scheduling.NewRequirement(corev1.LabelArchStable, corev1.NodeSelectorOpIn, "amd64"),
 		scheduling.NewRequirement(corev1.LabelOSStable, corev1.NodeSelectorOpIn, "linux"),
 		scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, availableZones...),
 		scheduling.NewRequirement(corev1.LabelFailureDomainBetaZone, corev1.NodeSelectorOpIn, availableZones...),

@@ -342,7 +342,15 @@ func (c CloudProvider) nodeGroupToNodeClaim(ctx context.Context, ng *k8s.NodeGro
 			return true
 		}
 		nodeClaim.Status.Capacity = lo.PickBy(instanceType.Capacity, resourceFilter)
-		nodeClaim.Status.Allocatable = lo.PickBy(instanceType.Allocatable(), resourceFilter)
+		
+		// Safely call Allocatable() only if Offerings is not nil
+		if instanceType.Offerings != nil {
+			nodeClaim.Status.Allocatable = lo.PickBy(instanceType.Allocatable(), resourceFilter)
+		} else {
+			// If Offerings is nil, use Capacity as fallback (with overhead subtraction if possible)
+			nodeClaim.Status.Allocatable = lo.PickBy(instanceType.Capacity, resourceFilter)
+			log.FromContext(ctx).Info("InstanceType has nil Offerings, using Capacity as Allocatable", "instanceType", instanceType.Name)
+		}
 	}
 	labels[corev1.LabelTopologyZone] = ng.GetAllocationPolicy().GetLocations()[0].GetZoneId()
 
