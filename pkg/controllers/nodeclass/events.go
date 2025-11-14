@@ -16,13 +16,12 @@ package nodeclass
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/tufitko/karpenter-provider-yandex/pkg/apis/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 
 	"sigs.k8s.io/karpenter/pkg/events"
-
-	"github.com/aws/karpenter-provider-aws/pkg/utils"
 )
 
 func WaitingOnNodeClaimTerminationEvent(nodeClass *v1alpha1.YandexNodeClass, names []string) events.Event {
@@ -30,7 +29,21 @@ func WaitingOnNodeClaimTerminationEvent(nodeClass *v1alpha1.YandexNodeClass, nam
 		InvolvedObject: nodeClass,
 		Type:           corev1.EventTypeNormal,
 		Reason:         "WaitingOnNodeClaimTermination",
-		Message:        fmt.Sprintf("Waiting on NodeClaim termination for %s", utils.PrettySlice(names, 5)),
+		Message:        fmt.Sprintf("Waiting on NodeClaim termination for %s", PrettySlice(names, 5)),
 		DedupeValues:   []string{string(nodeClass.UID)},
 	}
+}
+
+func PrettySlice[T any](s []T, maxItems int) string {
+	var sb strings.Builder
+	for i, elem := range s {
+		if i > maxItems-1 {
+			fmt.Fprintf(&sb, " and %d other(s)", len(s)-i)
+			break
+		} else if i > 0 {
+			fmt.Fprint(&sb, ", ")
+		}
+		fmt.Fprint(&sb, elem)
+	}
+	return sb.String()
 }

@@ -21,9 +21,11 @@ import (
 
 	"github.com/awslabs/operatorpkg/controller"
 	"github.com/patrickmn/go-cache"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/controllers/nodeclaim/garbagecollection"
 	"github.com/tufitko/karpenter-provider-yandex/pkg/controllers/nodeclass"
 	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/subnet"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
 )
 
@@ -31,10 +33,12 @@ func NewControllers(ctx context.Context,
 	kubeClient client.Client, recorder events.Recorder,
 	subnetProvider subnet.Provider,
 	validationCache *cache.Cache,
+	cloudProvider cloudprovider.CloudProvider,
 ) []controller.Controller {
 
 	controllers := []controller.Controller{
 		nodeclass.NewController(kubeClient, recorder, subnetProvider, validationCache, false),
+		garbagecollection.NewController(kubeClient, cloudProvider),
 	}
 
 	return controllers

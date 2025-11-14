@@ -20,7 +20,6 @@ import (
 	"strings"
 	"time"
 
-	v1 "github.com/aws/karpenter-provider-aws/pkg/apis/v1"
 	"github.com/mitchellh/hashstructure/v2"
 	"github.com/patrickmn/go-cache"
 	"github.com/samber/lo"
@@ -59,7 +58,7 @@ func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.YandexNo
 	}); ok {
 		// If any of the required status conditions are false, we know validation will fail regardless of the other values.
 		nodeClass.StatusConditions().SetFalse(
-			v1.ConditionTypeValidationSucceeded,
+			v1alpha1.ConditionTypeValidationSucceeded,
 			ConditionReasonDependenciesNotReady,
 			"Awaiting AMI, Instance Profile, Security Group, and Subnet resolution",
 		)
@@ -71,7 +70,7 @@ func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.YandexNo
 		// If none of the status conditions are false, but at least one is unknown, we should also consider the validation
 		// state to be unknown. Once all required conditions collapse to a true or false state, we can test validation.
 		nodeClass.StatusConditions().SetUnknownWithReason(
-			v1.ConditionTypeValidationSucceeded,
+			v1alpha1.ConditionTypeValidationSucceeded,
 			ConditionReasonDependenciesNotReady,
 			"Awaiting AMI, Instance Profile, Security Group, and Subnet resolution",
 		)
@@ -81,10 +80,10 @@ func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.YandexNo
 	if val, ok := v.cache.Get(v.cacheKey(nodeClass)); ok {
 		// We still update the status condition even if it's cached since we may have had a conflict error previously
 		if val == "" {
-			nodeClass.StatusConditions().SetTrue(v1.ConditionTypeValidationSucceeded)
+			nodeClass.StatusConditions().SetTrue(v1alpha1.ConditionTypeValidationSucceeded)
 		} else {
 			nodeClass.StatusConditions().SetFalse(
-				v1.ConditionTypeValidationSucceeded,
+				v1alpha1.ConditionTypeValidationSucceeded,
 				val.(string),
 				"something went wrong",
 			)
@@ -93,19 +92,19 @@ func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.YandexNo
 	}
 
 	if v.dryRunDisabled {
-		nodeClass.StatusConditions().SetTrue(v1.ConditionTypeValidationSucceeded)
+		nodeClass.StatusConditions().SetTrue(v1alpha1.ConditionTypeValidationSucceeded)
 		v.cache.SetDefault(v.cacheKey(nodeClass), "")
 		return reconcile.Result{RequeueAfter: requeueAfterTime}, nil
 	}
 
 	v.cache.SetDefault(v.cacheKey(nodeClass), "")
-	nodeClass.StatusConditions().SetTrue(v1.ConditionTypeValidationSucceeded)
+	nodeClass.StatusConditions().SetTrue(v1alpha1.ConditionTypeValidationSucceeded)
 	return reconcile.Result{RequeueAfter: requeueAfterTime}, nil
 }
 
 func (*Validation) requiredConditions() []string {
 	return []string{
-		v1.ConditionTypeSubnetsReady,
+		v1alpha1.ConditionTypeSubnetsReady,
 	}
 }
 

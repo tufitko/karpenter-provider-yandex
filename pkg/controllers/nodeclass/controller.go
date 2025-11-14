@@ -45,8 +45,6 @@ import (
 	"github.com/awslabs/operatorpkg/reasonable"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/events"
-
-	v1 "github.com/aws/karpenter-provider-aws/pkg/apis/v1"
 )
 
 type Controller struct {
@@ -87,9 +85,9 @@ func (c *Controller) Reconcile(ctx context.Context, nodeClass *v1alpha1.YandexNo
 		return c.finalize(ctx, nodeClass)
 	}
 
-	if !controllerutil.ContainsFinalizer(nodeClass, v1.TerminationFinalizer) {
+	if !controllerutil.ContainsFinalizer(nodeClass, v1alpha1.TerminationFinalizer) {
 		stored := nodeClass.DeepCopy()
-		controllerutil.AddFinalizer(nodeClass, v1.TerminationFinalizer)
+		controllerutil.AddFinalizer(nodeClass, v1alpha1.TerminationFinalizer)
 
 		// We use client.MergeFromWithOptimisticLock because patching a list with a JSON merge patch
 		// can cause races due to the fact that it fully replaces the list on a change
@@ -130,7 +128,7 @@ func (c *Controller) Reconcile(ctx context.Context, nodeClass *v1alpha1.YandexNo
 
 func (c *Controller) finalize(ctx context.Context, nodeClass *v1alpha1.YandexNodeClass) (reconcile.Result, error) {
 	stored := nodeClass.DeepCopy()
-	if !controllerutil.ContainsFinalizer(nodeClass, v1.TerminationFinalizer) {
+	if !controllerutil.ContainsFinalizer(nodeClass, v1alpha1.TerminationFinalizer) {
 		return reconcile.Result{}, nil
 	}
 	nodeClaims := &karpv1.NodeClaimList{}
@@ -141,7 +139,7 @@ func (c *Controller) finalize(ctx context.Context, nodeClass *v1alpha1.YandexNod
 		c.recorder.Publish(WaitingOnNodeClaimTerminationEvent(nodeClass, lo.Map(nodeClaims.Items, func(nc karpv1.NodeClaim, _ int) string { return nc.Name })))
 		return reconcile.Result{RequeueAfter: time.Minute * 10}, nil // periodically fire the event
 	}
-	controllerutil.RemoveFinalizer(nodeClass, v1.TerminationFinalizer)
+	controllerutil.RemoveFinalizer(nodeClass, v1alpha1.TerminationFinalizer)
 	if !equality.Semantic.DeepEqual(stored, nodeClass) {
 		// We use client.MergeFromWithOptimisticLock because patching a list with a JSON merge patch
 		// can cause races due to the fact that it fully replaces the list on a change

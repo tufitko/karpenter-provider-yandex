@@ -52,6 +52,7 @@ func main() {
 		os.Exit(1)
 	}
 	cloudProvider := metrics.Decorate(yandexCloudProvider)
+	overlayUndecoratedCloudProvider := metrics.Decorate(cloudProvider)
 	clusterState := state.NewCluster(op.Clock, op.GetClient(), cloudProvider)
 
 	op.
@@ -62,7 +63,9 @@ func main() {
 			op.GetClient(),
 			op.EventRecorder,
 			cloudProvider,
+			overlayUndecoratedCloudProvider,
 			clusterState,
+			op.InstanceTypeStore,
 		)...).
 		WithControllers(ctx, controllers.NewControllers(
 			ctx,
@@ -70,6 +73,7 @@ func main() {
 			op.EventRecorder,
 			op.SubnetProvider,
 			op.ValidationCache,
+			cloudProvider,
 		)...).
 		Start(ctx)
 }

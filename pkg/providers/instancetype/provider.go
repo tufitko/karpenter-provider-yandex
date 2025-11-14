@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/samber/lo"
 	"github.com/tufitko/karpenter-provider-yandex/pkg/apis/v1alpha1"
 	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/instancetype/offering"
 	"github.com/tufitko/karpenter-provider-yandex/pkg/yandex"
@@ -16,6 +17,7 @@ import (
 
 type Provider interface {
 	List(ctx context.Context, class *v1alpha1.YandexNodeClass) ([]*cloudprovider.InstanceType, error)
+	GetInstanceType(ctx context.Context, class *v1alpha1.YandexNodeClass, instanceTypeName string) (*cloudprovider.InstanceType, error)
 }
 
 type DefaultProvider struct {
@@ -48,6 +50,20 @@ func (p *DefaultProvider) List(ctx context.Context, class *v1alpha1.YandexNodeCl
 		res = append(res, types...)
 	}
 	return res, nil
+}
+
+func (p *DefaultProvider) GetInstanceType(ctx context.Context, class *v1alpha1.YandexNodeClass, instanceTypeName string) (*cloudprovider.InstanceType, error) {
+	its, err := p.List(ctx, class)
+	if err != nil {
+		return nil, err
+	}
+	it, found := lo.Find(its, func(it *cloudprovider.InstanceType) bool {
+		return it.Name == instanceTypeName
+	})
+	if !found {
+		return nil, fmt.Errorf("instance type %s not found", instanceTypeName)
+	}
+	return it, nil
 }
 
 func (p *DefaultProvider) generateTypesFor(ctx context.Context, platform yandex.PlatformId, class *v1alpha1.YandexNodeClass) ([]*cloudprovider.InstanceType, error) {
