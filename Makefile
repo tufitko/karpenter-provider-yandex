@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-REGISTRY ?= ghcr.io
+REGISTRY ?= docker.io
 USERNAME ?= tufitko
 PROJECT ?= karpenter-provider-yandex
 IMAGE ?= $(REGISTRY)/$(USERNAME)/$(PROJECT)
@@ -20,7 +20,8 @@ HELMREPO ?= $(REGISTRY)/$(USERNAME)/charts
 PLATFORM ?= linux/arm64,linux/amd64
 PUSH ?= false
 
-VERSION ?= $(shell git describe --dirty --tag --match='v*' 2> /dev/null)
+VERSION=dev
+#VERSION ?= $(shell git describe --dirty --tag --match='v*' 2> /dev/null)
 SHA ?= $(shell git describe --match=none --always --abbrev=7 --dirty)
 TAG ?= $(VERSION)
 
@@ -101,8 +102,8 @@ manifests: ## generate the controller-gen kubernetes manifests
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd object:headerFile="hack/boilerplate.go.txt" paths="./..." output:crd:artifacts:config=pkg/apis/crds
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd paths="./vendor/sigs.k8s.io/karpenter/..." output:crd:artifacts:config=pkg/apis/crds
 	@echo "Copying generated CRDs to Helm chart..."
-	@mkdir -p charts/karpenter-provider-proxmox/crds
-	@cp pkg/apis/crds/*.yaml charts/karpenter-provider-proxmox/crds/
+	@mkdir -p charts/karpenter-provider-yandex/crds
+	@cp pkg/apis/crds/*.yaml charts/karpenter-provider-yandex/crds/
 
 .PHONY: install
 install: ## Install
@@ -111,7 +112,7 @@ install: ## Install
 .PHONY: build
 build: ## Build
 	CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) go build -ldflags "$(GO_LDFLAGS)" \
-		-o bin/karpenter-provider-proxmox-$(ARCH) ./cmd/controller
+		-o bin/karpenter-provider-yandex-$(ARCH) ./cmd/controller
 
 .PHONY: run
 run: ## Run
@@ -128,27 +129,6 @@ unit: ## Unit Tests
 .PHONY: conformance
 conformance:
 	docker run --rm -it -v $(PWD):/src -w /src ghcr.io/siderolabs/conform:latest enforce
-
-############
-
-.PHONY: helm-unit
-helm-unit: ## Helm Unit Tests
-	@helm lint charts/karpenter-provider-proxmox
-	@helm template --include-crds -f charts/karpenter-provider-proxmox/ci/values.yaml \
-		karpenter-provider-proxmox charts/karpenter-provider-proxmox >/dev/null
-
-.PHONY: helm-login
-helm-login: ## Helm Login
-	@echo "${HELM_TOKEN}" | helm registry login $(REGISTRY) --username $(USERNAME) --password-stdin
-
-.PHONY: helm-release
-helm-release: ## Helm Release
-	@rm -rf dist/
-	@helm package charts/karpenter-provider-proxmox -d dist
-	@helm push dist/karpenter-provider-proxmox-*.tgz oci://$(HELMREPO) 2>&1 | tee dist/.digest
-	@cosign sign --yes $(COSING_ARGS) $(HELMREPO)/karpenter-provider-proxmox@$$(cat dist/.digest | awk -F "[, ]+" '/Digest/{print $$NF}')
-
-############
 
 .PHONY: docs
 docs:
@@ -186,7 +166,7 @@ images: ## Build images
 		--build-arg TAG="$(TAG)" \
 		--build-arg SHA="$(SHA)" \
 		-t $(IMAGE):$(TAG) \
-		--target karpenter-provider-proxmox \
+		--target karpenter-provider-yandex \
 		-f Dockerfile .
 
 .PHONY: images-checks
