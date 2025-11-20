@@ -5,6 +5,7 @@ package instancetype
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/samber/lo"
 	"github.com/tufitko/karpenter-provider-yandex/pkg/apis/v1alpha1"
@@ -49,6 +50,10 @@ func (p *DefaultProvider) List(ctx context.Context, class *v1alpha1.YandexNodeCl
 		}
 		res = append(res, types...)
 	}
+
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].Offerings.Cheapest().Price < res[j].Offerings.Cheapest().Price
+	})
 	return res, nil
 }
 

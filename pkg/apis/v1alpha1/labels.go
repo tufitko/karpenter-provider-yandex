@@ -28,6 +28,8 @@ const (
 	LabelInstanceCPUPlatform = apis.Group + "/instance-cpu-platform" // intel-cascade-lake, intel-ice-lake, etc
 	LabelInstanceCPU         = apis.Group + "/instance-cpu"          // 2, 4, 8, 16, 32, 64, 128
 	LabelInstanceMemory      = apis.Group + "/instance-memory"       // 1Gi, 2Gi, 4Gi, 8Gi, 16Gi, 32Gi, 64Gi, 128Gi
+	LabelInstanceType        = apis.Group + "/instance-type"
+	LabelInstanceCPUFraction = apis.Group + "/instance-cpu-fraction"
 )
 
 func init() {
@@ -36,5 +38,7 @@ func init() {
 		LabelInstanceCPUPlatform,
 		LabelInstanceCPU,
 		LabelInstanceMemory,
+		LabelInstanceType,
+		LabelInstanceCPUFraction,
 	)
 }

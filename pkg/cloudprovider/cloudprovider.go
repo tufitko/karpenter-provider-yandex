@@ -120,8 +120,6 @@ func (c CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 
 	log.Info("Successfully resolved instance types", "count", len(instanceTypes))
 
-	it := instanceTypes[0]
-
 	reqs := scheduling.NewNodeSelectorRequirementsWithMinValues(nodeClaim.Spec.Requirements...)
 	subnets, err := c.subnets.List(ctx, nodeClass)
 	if err != nil {
@@ -134,8 +132,24 @@ func (c CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 		return s.ZoneID, s.AvailableIPAddressCount
 	})
 
-	offering := it.Offerings.Compatible(reqs).Available().Cheapest()
-	for _, off := range it.Offerings.Compatible(reqs).Available() {
+	instanceTypes = lo.Filter(instanceTypes, func(it *cloudprovider.InstanceType, _ int) bool {
+		offerings := lo.Filter(it.Offerings, func(off *cloudprovider.Offering, _ int) bool {
+			off.Requirements.Add(it.Requirements.Values()...)
+			off.Requirements.Add(
+				scheduling.NewRequirement(karpv1.NodePoolLabelKey, corev1.NodeSelectorOpIn, nodeClaim.Labels[karpv1.NodePoolLabelKey]),
+				scheduling.NewRequirement("karpenter.yandex.cloud/yandexnodeclass", corev1.NodeSelectorOpIn, nodeClaim.Labels["karpenter.yandex.cloud/yandexnodeclass"]),
+			)
+			return off.Requirements.IsCompatible(reqs)
+		})
+
+		it.Offerings = offerings
+		return len(offerings) > 0
+	})
+
+	it := instanceTypes[0]
+
+	offering := it.Offerings.Available().Cheapest()
+	for _, off := range it.Offerings.Available() {
 		if zoneToAvailabeIPs[offering.Zone()] < zoneToAvailabeIPs[off.Zone()] {
 			offering = off
 		}
@@ -148,11 +162,15 @@ func (c CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 
 	labels := maps.Clone(nodeClass.Spec.Labels)
 	labels[karpv1.NodePoolLabelKey] = nodeClaim.Labels[karpv1.NodePoolLabelKey]
+	labels["karpenter.yandex.cloud/yandexnodeclass"] = nodeClaim.Labels["karpenter.yandex.cloud/yandexnodeclass"]
 
 	nodeLabels := maps.Clone(nodeClass.Spec.NodeLabels)
+	nodeLabels[karpv1.NodePoolLabelKey] = nodeClaim.Labels[karpv1.NodePoolLabelKey]
+	labels["karpenter.yandex.cloud/yandexnodeclass"] = nodeClaim.Labels["karpenter.yandex.cloud/yandexnodeclass"]
 	nodeLabels[v1alpha1.LabelInstanceCPUPlatform] = string(yait.Platform)
 	nodeLabels[v1alpha1.LabelInstanceCPU] = yait.CPU.String()
 	nodeLabels[v1alpha1.LabelInstanceMemory] = yait.Memory.String()
+	nodeLabels[v1alpha1.LabelInstanceCPUFraction] = fmt.Sprintf("%d", yait.CoreFraction)
 
 	nodeGroupId, err := c.sdk.CreateFixedNodeGroup(
 		ctx,

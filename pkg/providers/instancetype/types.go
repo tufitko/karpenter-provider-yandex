@@ -102,10 +102,7 @@ func computeRequirements(
 	info yandex.InstanceType,
 	nodeClass *v1alpha1.YandexNodeClass,
 ) scheduling.Requirements {
-	capacityTypes := []string{karpv1.CapacityTypeOnDemand}
-	if nodeClass.Spec.CanBePreemptible != nil && *nodeClass.Spec.CanBePreemptible {
-		capacityTypes = append(capacityTypes, karpv1.CapacityTypeSpot)
-	}
+	capacityTypes := []string{karpv1.CapacityTypeOnDemand, karpv1.CapacityTypeSpot}
 
 	// Available zones is the set intersection between zones where the instance type is available, and zones which are
 	// available via the provided EC2NodeClass.
@@ -114,18 +111,34 @@ func computeRequirements(
 	})
 	requirements := scheduling.NewRequirements(
 		// Well Known Upstream
-		scheduling.NewRequirement(corev1.LabelInstanceTypeStable, corev1.NodeSelectorOpIn, string(info.Platform)),
-		scheduling.NewRequirement(corev1.LabelInstanceType, corev1.NodeSelectorOpIn, string(info.Platform)),
+
+		// hack, node will have this labels with platform_id only
+		// but karpenter adds instance types as requirement in node claim (taken from CloudProvider.GetInstanceTypes)
+		scheduling.NewRequirement(corev1.LabelInstanceTypeStable, corev1.NodeSelectorOpIn, info.String()),
+		scheduling.NewRequirement(corev1.LabelInstanceType, corev1.NodeSelectorOpIn, info.String()),
+
 		scheduling.NewRequirement(corev1.LabelArchStable, corev1.NodeSelectorOpIn, "amd64"),
 		scheduling.NewRequirement(corev1.LabelOSStable, corev1.NodeSelectorOpIn, "linux"),
 		scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, availableZones...),
 		scheduling.NewRequirement(corev1.LabelFailureDomainBetaZone, corev1.NodeSelectorOpIn, availableZones...),
 		// Well Known to Karpenter
 		scheduling.NewRequirement(karpv1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, capacityTypes...),
+		scheduling.NewRequirement(v1alpha1.LabelInstanceCPUPlatform, corev1.NodeSelectorOpIn, string(info.Platform)),
+		scheduling.NewRequirement(v1alpha1.LabelInstanceCPU, corev1.NodeSelectorOpIn, info.CPU.String()),
+		scheduling.NewRequirement(v1alpha1.LabelInstanceMemory, corev1.NodeSelectorOpIn, info.Memory.String()),
+		scheduling.NewRequirement(v1alpha1.LabelInstanceType, corev1.NodeSelectorOpIn, info.String()),
+		scheduling.NewRequirement(v1alpha1.LabelInstanceCPUFraction, corev1.NodeSelectorOpIn, fmt.Sprintf("%d", info.CoreFraction)),
 		// Well Known to Yandex
 		scheduling.NewRequirement("yandex.cloud/pci-topology", corev1.NodeSelectorOpIn, "k8s"),
 		scheduling.NewRequirement("yandex.cloud/preemptible", corev1.NodeSelectorOpIn, "true", "false"),
 	)
+
+	// add nodeclass's labels
+	for k, v := range nodeClass.Spec.NodeLabels {
+		requirements.Add(
+			scheduling.NewRequirement(k, corev1.NodeSelectorOpIn, v),
+		)
+	}
 
 	return requirements
 }
