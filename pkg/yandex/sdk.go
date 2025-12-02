@@ -34,6 +34,8 @@ type SDK interface {
 		zoneId string,
 		subnetId string,
 		securityGroupIds []string,
+		diskType string,
+		diskSize int64,
 	) (string, error)
 	DeleteNodeGroup(ctx context.Context, nodeGroupId string) error
 	GetNodeGroup(ctx context.Context, nodeGroupId string) (*k8s.NodeGroup, error)
@@ -128,6 +130,8 @@ func (p *YCSDK) CreateFixedNodeGroup(
 	zoneId string,
 	subnetId string,
 	securityGroupIds []string,
+	diskType string,
+	diskSize int64,
 ) (string, error) {
 
 	labels = maps.Clone(labels)
@@ -152,8 +156,8 @@ func (p *YCSDK) CreateFixedNodeGroup(
 				// todo: gpu
 			},
 			BootDiskSpec: &k8s.DiskSpec{
-				DiskTypeId: "network-ssd", // todo: configurable
-				DiskSize:   30 * 1024 * 1024 * 1024,
+				DiskTypeId: diskType,
+				DiskSize:   diskSize,
 			},
 			Metadata: map[string]string{ // todo: configurable
 				"enable-oslogin": "true",

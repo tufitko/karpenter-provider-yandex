@@ -172,6 +172,9 @@ func (c CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 	nodeLabels[v1alpha1.LabelInstanceMemory] = yait.Memory.String()
 	nodeLabels[v1alpha1.LabelInstanceCPUFraction] = fmt.Sprintf("%d", yait.CoreFraction)
 
+	diskType := nodeClass.Spec.DiskType
+	diskSize := nodeClass.Spec.DiskSize.Value()
+
 	nodeGroupId, err := c.sdk.CreateFixedNodeGroup(
 		ctx,
 		nodeClaim.Name,
@@ -185,6 +188,8 @@ func (c CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 		offering.Zone(),
 		zoneToSubnet[offering.Zone()].ID,
 		nodeClass.Spec.SecurityGroups,
+		diskType,
+		diskSize,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("creating instance, %w", err)
