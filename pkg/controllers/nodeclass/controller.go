@@ -45,6 +45,7 @@ import (
 	"github.com/awslabs/operatorpkg/reasonable"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/events"
+	utilscontroller "sigs.k8s.io/karpenter/pkg/utils/controller"
 )
 
 type Controller struct {
@@ -156,7 +157,7 @@ func (c *Controller) finalize(ctx context.Context, nodeClass *v1alpha1.YandexNod
 	return reconcile.Result{}, nil
 }
 
-func (c *Controller) Register(_ context.Context, m manager.Manager) error {
+func (c *Controller) Register(ctx context.Context, m manager.Manager) error {
 	return controllerruntime.NewControllerManagedBy(m).
 		Named(c.Name()).
 		For(&v1alpha1.YandexNodeClass{}).
@@ -178,7 +179,7 @@ func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 		).
 		WithOptions(controller.Options{
 			RateLimiter:             reasonable.RateLimiter(),
-			MaxConcurrentReconciles: 10,
+			MaxConcurrentReconciles: utilscontroller.LinearScaleReconciles(utilscontroller.CPUCount(ctx), 1, 10),
 		}).
 		Complete(reconcile.AsReconciler[*v1alpha1.YandexNodeClass](m.GetClient(), c))
 }
