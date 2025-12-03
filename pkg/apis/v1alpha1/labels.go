@@ -30,6 +30,10 @@ const (
 	LabelInstanceMemory      = apis.Group + "/instance-memory"       // 1Gi, 2Gi, 4Gi, 8Gi, 16Gi, 32Gi, 64Gi, 128Gi
 	LabelInstanceType        = apis.Group + "/instance-type"
 	LabelInstanceCPUFraction = apis.Group + "/instance-cpu-fraction"
+
+	LabelYandexPCITopology    = "yandex.cloud/pci-topology"
+	LabelYandexMasqAgentReady = "node.kubernetes.io/masq-agent-ds-ready"
+	LabelYandexNPDReady       = "node.kubernetes.io/node-problem-detector-ds-ready"
 )
 
 func init() {
@@ -40,5 +44,8 @@ func init() {
 		LabelInstanceMemory,
 		LabelInstanceType,
 		LabelInstanceCPUFraction,
+		LabelYandexPCITopology,
+		LabelYandexMasqAgentReady,
+		LabelYandexNPDReady,
 	)
 }

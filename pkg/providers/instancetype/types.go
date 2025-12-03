@@ -131,6 +131,8 @@ func computeRequirements(
 		// Well Known to Yandex
 		scheduling.NewRequirement("yandex.cloud/pci-topology", corev1.NodeSelectorOpIn, "k8s"),
 		scheduling.NewRequirement("yandex.cloud/preemptible", corev1.NodeSelectorOpIn, "true", "false"),
+		scheduling.NewRequirement("node.kubernetes.io/masq-agent-ds-ready", corev1.NodeSelectorOpIn, "true"),
+		scheduling.NewRequirement("node.kubernetes.io/node-problem-detector-ds-ready", corev1.NodeSelectorOpIn, "true"),
 	)
 
 	// add nodeclass's labels
