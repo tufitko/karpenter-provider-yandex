@@ -209,7 +209,7 @@ func kubeReservedEphemeralStorage() resource.Quantity {
 
 func evictionThreshold(storage resource.Quantity) corev1.ResourceList {
 	return corev1.ResourceList{
-		corev1.ResourceMemory:           resource.MustParse("100Mi"),
+		corev1.ResourceMemory:           resource.MustParse("220Mi"), // why? because f... in small nodes algo from doc isn't working
 		corev1.ResourceEphemeralStorage: resource.MustParse(fmt.Sprint(math.Ceil(float64(storage.Value()) / 100 * 10))),
 	}
 }
