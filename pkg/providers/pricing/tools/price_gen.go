@@ -27,10 +27,18 @@ type PlatformPricing struct {
 	PreemptibleRAM         float64
 }
 
+type DiskPricing struct {
+	SSD              float64
+	HDD              float64
+	SSDNonreplicated float64
+	SSDIo            float64
+}
+
 type RegionPricing struct {
 	Region    string
 	Currency  string
 	Platforms map[yandex.PlatformId]PlatformPricing
+	Disks     DiskPricing
 }
 
 const (
@@ -126,6 +134,14 @@ var {{.Region}}Pricing = map[yandex.PlatformId]pricingPlatform{
 		preemptibleRAM: {{printf "%.4f" $platform.PreemptibleRAM}},
 	},
 {{end}}}
+
+// Per hour for 1GB of disk storage
+var {{.Region}}DiskPricing = map[yandex.DiskType]float64{
+{{if .Disks.SSD}}	yandex.SSD: {{printf "%.4f" .Disks.SSD}},
+{{end}}{{if .Disks.HDD}}	yandex.HDD: {{printf "%.4f" .Disks.HDD}},
+{{end}}{{if .Disks.SSDNonreplicated}}	yandex.SSDNonreplicated: {{printf "%.4f" .Disks.SSDNonreplicated}},
+{{end}}{{if .Disks.SSDIo}}	yandex.SSDIo: {{printf "%.4f" .Disks.SSDIo}},
+{{end}}}
 `
 
 func main() {
@@ -162,6 +178,7 @@ func fetchPricingFromAPI(region string) (*RegionPricing, error) {
 		Region:    region,
 		Currency:  currency,
 		Platforms: make(map[yandex.PlatformId]PlatformPricing),
+		Disks:     DiskPricing{},
 	}
 
 	var nextPageToken string
@@ -220,13 +237,13 @@ func fetchPricingFromAPI(region string) (*RegionPricing, error) {
 			}
 			// todo: support reservation
 			if strings.Contains(sku.Name, "резервирование") ||
-				strings.Contains(sku.Name, "HDD") ||
-				strings.Contains(sku.Name, "SSD") ||
 				strings.Contains(sku.Name, "Программно ускоренная сеть") ||
 				strings.Contains(sku.Name, "Самостоятельная покупка") ||
-				strings.Contains(sku.Name, "Образ") ||
-				strings.Contains(sku.Name, "Снимок") ||
 				strings.Contains(sku.Name, "Выделенный хост") {
+				continue
+			}
+
+			if processDiskSKU(sku, pricing) {
 				continue
 			}
 
@@ -394,6 +411,80 @@ func isPreemptible(sku SKU) bool {
 	return strings.Contains(name, "preemptible") || strings.Contains(name, "прерываем")
 }
 
+// processDiskSKU processes disk-related SKUs and returns true if the SKU was a disk
+func processDiskSKU(sku SKU, pricing *RegionPricing) bool {
+	nameLocal := strings.ToLower(sku.Name)
+
+	if strings.Contains(nameLocal, "образ") || strings.Contains(nameLocal, "снимок") {
+		return false
+	}
+
+	// Check if this is a disk SKU by pricingUnit or name
+	isDisk := sku.PricingUnit == "gbyte*hour" && (strings.Contains(nameLocal, "хранилище") ||
+		strings.Contains(nameLocal, "файловая система") ||
+		strings.Contains(nameLocal, "hdd") ||
+		strings.Contains(nameLocal, "ssd") ||
+		strings.Contains(nameLocal, "disk") ||
+		strings.Contains(nameLocal, "storage"))
+
+	if !isDisk {
+		return false
+	}
+
+	if len(sku.PricingVersions) == 0 {
+		return true
+	}
+
+	latestVersion := sku.PricingVersions[0]
+	if len(latestVersion.PricingExpression.Rates) == 0 {
+		return true
+	}
+
+	unitPrice := latestVersion.PricingExpression.Rates[0].UnitPrice
+	price, err := strconv.ParseFloat(unitPrice, 64)
+	if err != nil {
+		fmt.Printf("Failed to parse disk price %s for SKU %s: %v\n", unitPrice, sku.Name, err)
+		return true
+	}
+
+	//  SSDIO
+	if strings.Contains(nameLocal, "сверхбыстрое") && strings.Contains(nameLocal, "3 репликами") {
+		pricing.Disks.SSDIo = price
+		fmt.Printf("Found SSD IO price: %.4f RUB/hour (from SKU: %s)\n", price, sku.Name)
+		return true
+	}
+
+	//  SSDNonreplicated
+	if strings.Contains(nameLocal, "нереплицируемое") ||
+		strings.Contains(nameLocal, "non-replicated") ||
+		strings.Contains(nameLocal, "nonreplicated") {
+		pricing.Disks.SSDNonreplicated = price
+		fmt.Printf("Found SSD Non-replicated price: %.4f RUB/hour (from SKU: %s)\n", price, sku.Name)
+		return true
+	}
+
+	//  SSD
+	if (strings.Contains(nameLocal, "быстрое") || strings.Contains(nameLocal, "быстрая")) &&
+		strings.Contains(nameLocal, "ssd") &&
+		!strings.Contains(nameLocal, "сверхбыстрое") &&
+		!strings.Contains(nameLocal, "нереплицируемое") {
+		pricing.Disks.SSD = price
+		fmt.Printf("Found SSD price: %.4f RUB/hour (from SKU: %s)\n", price, sku.Name)
+		return true
+	}
+
+	//  HDD
+	if (strings.Contains(nameLocal, "стандартное") || strings.Contains(nameLocal, "стандартная")) &&
+		strings.Contains(nameLocal, "hdd") {
+		pricing.Disks.HDD = price
+		fmt.Printf("Found HDD price: %.4f RUB/hour (from SKU: %s)\n", price, sku.Name)
+		return true
+	}
+
+	fmt.Printf("Unknown disk type for SKU: %s (name: %s, pricingUnit: %s)\n", sku.Name, nameLocal, sku.PricingUnit)
+	return true
+}
+
 func generatePricingFile(pricing *RegionPricing) error {
 	filename := fmt.Sprintf("%s.pricing.go", pricing.Region)
 
@@ -417,6 +508,7 @@ func generatePricingFile(pricing *RegionPricing) error {
 			RAM                    float64
 			PreemptibleRAM         float64
 		}
+		Disks DiskPricing
 	}{
 		Timestamp: time.Now().Format("2006-01-02 15:04:05"),
 		Region:    pricing.Region,
@@ -426,6 +518,7 @@ func generatePricingFile(pricing *RegionPricing) error {
 			RAM                    float64
 			PreemptibleRAM         float64
 		}),
+		Disks: pricing.Disks,
 	}
 
 	platformNames := make([]string, 0, len(pricing.Platforms))

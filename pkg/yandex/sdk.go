@@ -133,7 +133,6 @@ func (p *YCSDK) CreateFixedNodeGroup(
 	diskType string,
 	diskSize int64,
 ) (string, error) {
-
 	labels = maps.Clone(labels)
 	labels["managed-by"] = "karpenter"
 	for k, v := range nodeLabels {
@@ -146,7 +145,7 @@ func (p *YCSDK) CreateFixedNodeGroup(
 		Description: "karpenter node group",
 		Labels:      labels,
 		NodeTemplate: &k8s.NodeTemplate{
-			Name:       name + "-{instance.index}",
+			Name:       name + "-" + zoneId + "-{instance.index}",
 			Labels:     labels,
 			PlatformId: string(platformId),
 			ResourcesSpec: &k8s.ResourcesSpec{

@@ -80,7 +80,7 @@ func (p *DefaultProvider) generateTypesFor(ctx context.Context, platform yandex.
 			res = append(res, p.resolver.Resolve(ctx, t, class))
 		}
 	}
-	return p.offeringProvider.InjectOfferings(ctx, res, p.allZones), nil
+	return p.offeringProvider.InjectOfferings(ctx, res, p.allZones, class), nil
 }
 
 func (p *DefaultProvider) generateInstanceTypes(platform yandex.PlatformId, configuration InstanceConfiguration) []yandex.InstanceType {

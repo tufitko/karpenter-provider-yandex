@@ -42,7 +42,7 @@ else
 BUILD_ARGS += --output type=docker
 endif
 
-CONTROLLER_GEN ?= controller-gen
+CONTROLLER_GEN ?= $(shell go env GOPATH)/bin/controller-gen
 
 COSING_ARGS ?=
 
