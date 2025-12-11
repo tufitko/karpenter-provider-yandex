@@ -21,7 +21,7 @@ func TestInstanceType_String(t *testing.T) {
 				Memory:       resource.MustParse("4Gi"),
 				CoreFraction: CoreFraction100,
 			},
-			expected: "ru_standard-v3_2_4Gi_100",
+			expected: "standard-v3_2_4Gi_100",
 		},
 		{
 			name: "AMD EPYC with fractional CPU",
@@ -31,7 +31,7 @@ func TestInstanceType_String(t *testing.T) {
 				Memory:       resource.MustParse("2048Mi"),
 				CoreFraction: CoreFraction50,
 			},
-			expected: "kz_amd-v1_500m_2Gi_50",
+			expected: "amd-v1_500m_2Gi_50",
 		},
 		{
 			name: "Intel Broadwell with 5% fraction",
@@ -41,7 +41,7 @@ func TestInstanceType_String(t *testing.T) {
 				Memory:       resource.MustParse("8G"),
 				CoreFraction: CoreFraction5,
 			},
-			expected: "ru_standard-v1_4_8G_5",
+			expected: "standard-v1_4_8G_5",
 		},
 	}
 
@@ -64,7 +64,7 @@ func TestInstanceType_FromString(t *testing.T) {
 	}{
 		{
 			name:  "Valid Intel Ice Lake instance",
-			input: "ru_standard-v3_2_4Gi_100",
+			input: "standard-v3_2_4Gi_100",
 			expected: InstanceType{
 				Platform:     PlatformIntelIceLake,
 				CPU:          resource.MustParse("2"),
@@ -75,18 +75,18 @@ func TestInstanceType_FromString(t *testing.T) {
 		},
 		{
 			name:  "Valid AMD EPYC instance",
-			input: "kz_amd-v1_500m_2048Mi_50",
+			input: "amd-v1_500m_2Gi_50",
 			expected: InstanceType{
 				Platform:     PlatformAMDZen3,
 				CPU:          resource.MustParse("500m"),
-				Memory:       resource.MustParse("2048Mi"),
+				Memory:       resource.MustParse("2Gi"),
 				CoreFraction: CoreFraction50,
 			},
 			expectError: false,
 		},
 		{
 			name:  "Valid Intel Broadwell instance",
-			input: "ru_standard-v1_4_8G_5",
+			input: "standard-v1_4_8G_5",
 			expected: InstanceType{
 				Platform:     PlatformIntelBroadwell,
 				CPU:          resource.MustParse("4"),
@@ -97,31 +97,31 @@ func TestInstanceType_FromString(t *testing.T) {
 		},
 		{
 			name:        "Invalid format - too few parts",
-			input:       "ru_standard-v3_2_4Gi",
+			input:       "standard-v3_2_4Gi",
 			expected:    InstanceType{},
 			expectError: true,
 		},
 		{
 			name:        "Invalid format - too many parts",
-			input:       "ru_standard-v3_2_4Gi_100_extra",
+			input:       "standard-v3_2_4Gi_100_extra",
 			expected:    InstanceType{},
 			expectError: true,
 		},
 		{
 			name:        "Invalid CPU quantity",
-			input:       "ru_standard-v3_invalid_4Gi_100",
+			input:       "standard-v3_invalid_4Gi_100",
 			expected:    InstanceType{},
 			expectError: true,
 		},
 		{
 			name:        "Invalid Memory quantity",
-			input:       "ru_standard-v3_2_invalid_100",
+			input:       "standard-v3_2_invalid_100",
 			expected:    InstanceType{},
 			expectError: true,
 		},
 		{
 			name:        "Invalid CoreFraction",
-			input:       "ru_standard-v3_2_4Gi_invalid",
+			input:       "standard-v3_2_4Gi_invalid",
 			expected:    InstanceType{},
 			expectError: true,
 		},

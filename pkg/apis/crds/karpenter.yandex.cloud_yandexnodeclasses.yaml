@@ -74,10 +74,12 @@ spec:
                   - "network-hdd"
                   - "network-ssd" (default)
                   - "network-ssd-nonreplicated"
+                  - "network-ssd-io-m3"
                 enum:
                 - network-hdd
                 - network-ssd
                 - network-ssd-nonreplicated
+                - network-ssd-io-m3
                 type: string
               labels:
                 additionalProperties:

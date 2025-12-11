@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tufitko/karpenter-provider-yandex/pkg/apis/v1alpha1"
 	"github.com/tufitko/karpenter-provider-yandex/pkg/yandex"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -29,7 +30,7 @@ import (
 )
 
 type Provider interface {
-	InjectOfferings(context.Context, []*cloudprovider.InstanceType, []string) []*cloudprovider.InstanceType
+	InjectOfferings(context.Context, []*cloudprovider.InstanceType, []string, *v1alpha1.YandexNodeClass) []*cloudprovider.InstanceType
 }
 
 type DefaultProvider struct {
@@ -49,6 +50,7 @@ func (p *DefaultProvider) InjectOfferings(
 	ctx context.Context,
 	instanceTypes []*cloudprovider.InstanceType,
 	allZones sets.Set[string],
+	nodeClass *v1alpha1.YandexNodeClass,
 ) []*cloudprovider.InstanceType {
 	var its []*cloudprovider.InstanceType
 	for _, it := range instanceTypes {
@@ -56,6 +58,7 @@ func (p *DefaultProvider) InjectOfferings(
 			ctx,
 			it,
 			allZones,
+			nodeClass,
 		)
 		// NOTE: By making this copy one level deep, we can modify the offerings without mutating the results from previous
 		// GetInstanceTypes calls. This should still be done with caution - it is currently done here in the provider, and
@@ -71,17 +74,27 @@ func (p *DefaultProvider) InjectOfferings(
 	return its
 }
 
+// diskFromNodeClass extracts disk information from nodeClass
+func diskFromNodeClass(nodeClass *v1alpha1.YandexNodeClass) yandex.Disk {
+	return yandex.Disk{
+		Type: yandex.DiskType(nodeClass.Spec.DiskType),
+		Size: nodeClass.Spec.DiskSize.Value() / (1024 * 1024 * 1024),
+	}
+}
+
 //nolint:gocyclo
 func (p *DefaultProvider) createOfferings(
 	_ context.Context,
 	it *cloudprovider.InstanceType,
 	allZones sets.Set[string],
+	nodeClass *v1alpha1.YandexNodeClass,
 ) cloudprovider.Offerings {
 	var offerings []*cloudprovider.Offering
 	itZones := sets.New(it.Requirements.Get(corev1.LabelTopologyZone).Values()...)
 
 	itName := yandex.InstanceType{}
 	_ = itName.FromString(it.Name)
+	disk := diskFromNodeClass(nodeClass)
 
 	for zone := range allZones {
 		for _, capacityType := range it.Requirements.Get(karpv1.CapacityTypeLabelKey).Values() {
@@ -95,6 +108,13 @@ func (p *DefaultProvider) createOfferings(
 			default:
 				panic(fmt.Sprintf("invalid capacity type %q in requirements for instance type %q", capacityType, it.Name))
 			}
+			
+			diskPrice, hasDiskPrice := p.pricingProvider.DiskPrice(disk)
+
+			if hasDiskPrice {
+				price += diskPrice
+			}
+
 			offering := &cloudprovider.Offering{
 				Requirements: scheduling.NewRequirements(
 					scheduling.NewRequirement(karpv1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, capacityType),

@@ -61,8 +61,9 @@ type YandexNodeClassSpec struct {
 	// - "network-hdd"
 	// - "network-ssd" (default)
 	// - "network-ssd-nonreplicated"
+	// - "network-ssd-io-m3"
 	// +optional
-	// +kubebuilder:validation:Enum=network-hdd;network-ssd;network-ssd-nonreplicated
+	// +kubebuilder:validation:Enum=network-hdd;network-ssd;network-ssd-nonreplicated;network-ssd-io-m3
 	// +kubebuilder:default=network-ssd
 	DiskType string `json:"diskType,omitempty"`
 

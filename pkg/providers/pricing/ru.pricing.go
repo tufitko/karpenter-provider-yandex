@@ -12,7 +12,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Generated on 2025-09-10 19:28:29 by price_gen tool
+// Generated on 2025-12-10 17:52:48 by price_gen tool
 package pricing
 
 import "github.com/tufitko/karpenter-provider-yandex/pkg/yandex"
@@ -20,13 +20,13 @@ import "github.com/tufitko/karpenter-provider-yandex/pkg/yandex"
 var ruPricing = map[yandex.PlatformId]pricingPlatform{
 	yandex.PlatformAMDZen3: {
 		perFraction: map[yandex.CoreFraction]float64{
-			yandex.CoreFraction20: 0.4752,
-			yandex.CoreFraction50: 0.6912,
+			yandex.CoreFraction20:  0.4752,
+			yandex.CoreFraction50:  0.6912,
 			yandex.CoreFraction100: 1.1340,
 		},
 		preemptiblePerFraction: map[yandex.CoreFraction]float64{
-			yandex.CoreFraction20: 0.1512,
-			yandex.CoreFraction50: 0.2160,
+			yandex.CoreFraction20:  0.1512,
+			yandex.CoreFraction50:  0.2160,
 			yandex.CoreFraction100: 0.3132,
 		},
 		ram:            0.3024,
@@ -34,13 +34,13 @@ var ruPricing = map[yandex.PlatformId]pricingPlatform{
 	},
 	yandex.PlatformAmdZen4ComputeOptimized: {
 		perFraction: map[yandex.CoreFraction]float64{
-			yandex.CoreFraction20: 0.4580,
-			yandex.CoreFraction50: 1.1450,
+			yandex.CoreFraction20:  0.4580,
+			yandex.CoreFraction50:  1.1450,
 			yandex.CoreFraction100: 2.2900,
 		},
 		preemptiblePerFraction: map[yandex.CoreFraction]float64{
-			yandex.CoreFraction20: 0.1374,
-			yandex.CoreFraction50: 0.3435,
+			yandex.CoreFraction20:  0.1374,
+			yandex.CoreFraction50:  0.3435,
 			yandex.CoreFraction100: 1.6030,
 		},
 		ram:            0.4200,
@@ -48,13 +48,13 @@ var ruPricing = map[yandex.PlatformId]pricingPlatform{
 	},
 	yandex.PlatformIntelBroadwell: {
 		perFraction: map[yandex.CoreFraction]float64{
-			yandex.CoreFraction5: 0.3193,
-			yandex.CoreFraction20: 0.9064,
+			yandex.CoreFraction5:   0.3193,
+			yandex.CoreFraction20:  0.9064,
 			yandex.CoreFraction100: 1.1536,
 		},
 		preemptiblePerFraction: map[yandex.CoreFraction]float64{
-			yandex.CoreFraction5: 0.1957,
-			yandex.CoreFraction20: 0.2781,
+			yandex.CoreFraction5:   0.1957,
+			yandex.CoreFraction20:  0.2781,
 			yandex.CoreFraction100: 0.3502,
 		},
 		ram:            0.4017,
@@ -62,15 +62,15 @@ var ruPricing = map[yandex.PlatformId]pricingPlatform{
 	},
 	yandex.PlatformIntelCascadeLake: {
 		perFraction: map[yandex.CoreFraction]float64{
-			yandex.CoreFraction5: 0.1728,
-			yandex.CoreFraction20: 0.5292,
-			yandex.CoreFraction50: 0.7776,
+			yandex.CoreFraction5:   0.1728,
+			yandex.CoreFraction20:  0.5292,
+			yandex.CoreFraction50:  0.7776,
 			yandex.CoreFraction100: 1.2852,
 		},
 		preemptiblePerFraction: map[yandex.CoreFraction]float64{
-			yandex.CoreFraction5: 0.1080,
-			yandex.CoreFraction20: 0.1728,
-			yandex.CoreFraction50: 0.2376,
+			yandex.CoreFraction5:   0.1080,
+			yandex.CoreFraction20:  0.1728,
+			yandex.CoreFraction50:  0.2376,
 			yandex.CoreFraction100: 0.3456,
 		},
 		ram:            0.3348,
@@ -78,13 +78,13 @@ var ruPricing = map[yandex.PlatformId]pricingPlatform{
 	},
 	yandex.PlatformIntelIceLake: {
 		perFraction: map[yandex.CoreFraction]float64{
-			yandex.CoreFraction20: 0.4752,
-			yandex.CoreFraction50: 0.6912,
+			yandex.CoreFraction20:  0.4752,
+			yandex.CoreFraction50:  0.6912,
 			yandex.CoreFraction100: 1.1340,
 		},
 		preemptiblePerFraction: map[yandex.CoreFraction]float64{
-			yandex.CoreFraction20: 0.1512,
-			yandex.CoreFraction50: 0.2160,
+			yandex.CoreFraction20:  0.1512,
+			yandex.CoreFraction50:  0.2160,
 			yandex.CoreFraction100: 0.3132,
 		},
 		ram:            0.3024,
@@ -94,9 +94,16 @@ var ruPricing = map[yandex.PlatformId]pricingPlatform{
 		perFraction: map[yandex.CoreFraction]float64{
 			yandex.CoreFraction100: 1.9008,
 		},
-		preemptiblePerFraction: map[yandex.CoreFraction]float64{
-		},
-		ram:            0.3456,
-		preemptibleRAM: 0.0000,
+		preemptiblePerFraction: map[yandex.CoreFraction]float64{},
+		ram:                    0.3456,
+		preemptibleRAM:         0.0000,
 	},
+}
+
+// Per hour for 1GB of disk storage
+var ruDiskPricing = map[yandex.DiskType]float64{
+	yandex.SSD:              0.0179,
+	yandex.HDD:              0.0044,
+	yandex.SSDNonreplicated: 0.0132,
+	yandex.SSDIo:            0.0297,
 }

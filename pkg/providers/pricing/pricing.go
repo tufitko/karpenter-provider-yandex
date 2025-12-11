@@ -23,6 +23,7 @@ import (
 type Provider interface {
 	OnDemandPrice(yandex.InstanceType) (float64, bool)
 	SpotPrice(yandex.InstanceType) (float64, bool)
+	DiskPrice(yandex.Disk) (float64, bool)
 }
 
 type DefaultProvider struct {
@@ -69,4 +70,12 @@ func (p *DefaultProvider) SpotPrice(instanceType yandex.InstanceType) (float64, 
 	memPrice := platform.preemptibleRAM
 
 	return cpuPrice*instanceType.CPU.AsApproximateFloat64() + memPrice*(float64(instanceType.Memory.Value())/1024/1024/1024), true
+}
+
+func (p *DefaultProvider) DiskPrice(disk yandex.Disk) (float64, bool) {
+	price, ok := ruDiskPricing[disk.Type]
+	if !ok {
+		return 0, false
+	}
+	return price * float64(disk.Size), true
 }

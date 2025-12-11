@@ -46,6 +46,20 @@ func (r CoreFraction) String() string {
 	return strconv.FormatInt(int64(r), 10)
 }
 
+type DiskType string
+
+const (
+	SSD              DiskType = "network-ssd"
+	HDD              DiskType = "network-hdd"
+	SSDNonreplicated DiskType = "network-ssd-nonreplicated"
+	SSDIo            DiskType = "network-ssd-io-m3"
+)
+
+type Disk struct {
+	Type DiskType
+	Size int64
+}
+
 type InstanceType struct {
 	Platform     PlatformId
 	CPU          resource.Quantity
