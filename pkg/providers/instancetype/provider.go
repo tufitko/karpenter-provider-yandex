@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/samber/lo"
 	"github.com/tufitko/karpenter-provider-yandex/pkg/apis/v1alpha1"
 	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/instancetype/offering"
 	"github.com/tufitko/karpenter-provider-yandex/pkg/yandex"
@@ -22,19 +21,24 @@ type Provider interface {
 }
 
 type DefaultProvider struct {
-	configuration    map[yandex.PlatformId][]InstanceConfiguration
-	offeringProvider *offering.DefaultProvider
-	resolver         Resolver
-	allZones         sets.Set[string]
+	configuration     map[yandex.PlatformId][]InstanceConfiguration
+	offeringProvider  *offering.DefaultProvider
+	resolver          Resolver
+	allZones          sets.Set[string]
+	namesInstanceType map[string]yandex.InstanceType
 }
 
 func NewDefaultProvider(resolver Resolver, offeringProvider *offering.DefaultProvider, allZones sets.Set[string]) *DefaultProvider {
-	return &DefaultProvider{
+	p := &DefaultProvider{
 		configuration:    ruAvailableConfigurations,
 		resolver:         resolver,
 		offeringProvider: offeringProvider,
 		allZones:         allZones,
 	}
+
+	p.namesInstanceType = p.buildNamesInstanceType()
+
+	return p
 }
 
 func (p *DefaultProvider) List(ctx context.Context, class *v1alpha1.YandexNodeClass) ([]*cloudprovider.InstanceType, error) {
@@ -58,17 +62,24 @@ func (p *DefaultProvider) List(ctx context.Context, class *v1alpha1.YandexNodeCl
 }
 
 func (p *DefaultProvider) GetInstanceType(ctx context.Context, class *v1alpha1.YandexNodeClass, instanceTypeName string) (*cloudprovider.InstanceType, error) {
-	its, err := p.List(ctx, class)
-	if err != nil {
-		return nil, err
+	if class == nil {
+		return nil, fmt.Errorf("node class is required")
 	}
-	it, found := lo.Find(its, func(it *cloudprovider.InstanceType) bool {
-		return it.Name == instanceTypeName
-	})
-	if !found {
+
+	base, ok := p.namesInstanceType[instanceTypeName]
+
+	if !ok {
 		return nil, fmt.Errorf("instance type %s not found", instanceTypeName)
 	}
-	return it, nil
+
+	resolved := p.resolver.Resolve(ctx, base, class)
+
+	withOfferings := p.offeringProvider.InjectOfferings(ctx, []*cloudprovider.InstanceType{resolved}, p.allZones, class)
+	if len(withOfferings) == 0 {
+		return nil, fmt.Errorf("no offerings for instance type %s", instanceTypeName)
+	}
+
+	return withOfferings[0], nil
 }
 
 func (p *DefaultProvider) generateTypesFor(ctx context.Context, platform yandex.PlatformId, class *v1alpha1.YandexNodeClass) ([]*cloudprovider.InstanceType, error) {
@@ -96,4 +107,18 @@ func (p *DefaultProvider) generateInstanceTypes(platform yandex.PlatformId, conf
 		}
 	}
 	return res
+}
+
+func (p *DefaultProvider) buildNamesInstanceType() map[string]yandex.InstanceType {
+	names := make(map[string]yandex.InstanceType)
+	for platform, configs := range p.configuration {
+		for _, configuration := range configs {
+			types := p.generateInstanceTypes(platform, configuration)
+			for _, t := range types {
+				name := t.String()
+				names[name] = t
+			}
+		}
+	}
+	return names
 }
