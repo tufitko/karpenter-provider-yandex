@@ -37,12 +37,6 @@ type YandexNodeClassSpec struct {
 	// +optional
 	Platform string `json:"platform"`
 
-	// CanBePreemptible determines if the nodes can be preemptible
-	// By default, nodes are not preemptible
-	// +kubebuilder:default=false
-	// +optional
-	CanBePreemptible *bool `json:"can_be_preemptible,omitempty"`
-
 	// CoreFractions is the list of core fractions to use for the nodes
 	// If not specified, the default core fraction of 100% will be used
 	// +optional

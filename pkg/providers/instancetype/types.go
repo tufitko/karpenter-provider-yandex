@@ -55,7 +55,7 @@ type ZoneData struct {
 
 type Resolver interface {
 	// Resolve generates an InstanceType based on raw InstanceTypeInfo and NodeClass setting data
-	Resolve(ctx context.Context, info yandex.InstanceType, nodeClass *v1alpha1.YandexNodeClass) *cloudprovider.InstanceType
+	Resolve(ctx context.Context, info yandex.InstanceType, nodeClass *v1alpha1.YandexNodeClass, canBePreemptible bool) *cloudprovider.InstanceType
 }
 
 type DefaultResolver struct {
@@ -68,12 +68,13 @@ func NewDefaultResolver(maxPodsPerNode int) *DefaultResolver {
 	}
 }
 
-func (d *DefaultResolver) Resolve(ctx context.Context, info yandex.InstanceType, nodeClass *v1alpha1.YandexNodeClass) *cloudprovider.InstanceType {
+func (d *DefaultResolver) Resolve(ctx context.Context, info yandex.InstanceType, nodeClass *v1alpha1.YandexNodeClass, canBePreemptible bool) *cloudprovider.InstanceType {
 	return NewInstanceType(
 		ctx,
 		info,
 		nodeClass,
 		d.maxPodsPerNode,
+		canBePreemptible,
 	)
 }
 
@@ -82,10 +83,11 @@ func NewInstanceType(
 	info yandex.InstanceType,
 	nodeClass *v1alpha1.YandexNodeClass,
 	maxPods int,
+	canBePreemptible bool,
 ) *cloudprovider.InstanceType {
 	it := &cloudprovider.InstanceType{
 		Name:         info.String(),
-		Requirements: computeRequirements(info, nodeClass),
+		Requirements: computeRequirements(info, nodeClass, canBePreemptible),
 		Capacity:     computeCapacity(ctx, info, nodeClass.Spec.DiskSize, maxPods),
 		Offerings:    cloudprovider.Offerings{}, // Initialize empty offerings to prevent panic
 		Overhead: &cloudprovider.InstanceTypeOverhead{
@@ -101,9 +103,12 @@ func NewInstanceType(
 func computeRequirements(
 	info yandex.InstanceType,
 	nodeClass *v1alpha1.YandexNodeClass,
+	canBePreemptible bool,
 ) scheduling.Requirements {
-	capacityTypes := []string{karpv1.CapacityTypeOnDemand, karpv1.CapacityTypeSpot}
-
+	capacityTypes := []string{karpv1.CapacityTypeOnDemand}
+	if canBePreemptible {
+		capacityTypes = append(capacityTypes, karpv1.CapacityTypeSpot)
+	}
 	// Available zones is the set intersection between zones where the instance type is available, and zones which are
 	// available via the provided EC2NodeClass.
 	availableZones := lo.Map(nodeClass.Status.Subnets, func(item v1alpha1.Subnet, index int) string {
