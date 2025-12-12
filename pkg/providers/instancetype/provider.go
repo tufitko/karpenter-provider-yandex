@@ -25,7 +25,12 @@ type DefaultProvider struct {
 	offeringProvider  *offering.DefaultProvider
 	resolver          Resolver
 	allZones          sets.Set[string]
-	namesInstanceType map[string]yandex.InstanceType
+	namesInstanceType map[string]infoInstanceType
+}
+
+type infoInstanceType struct {
+	info             yandex.InstanceType
+	canBePreemptible bool
 }
 
 func NewDefaultProvider(resolver Resolver, offeringProvider *offering.DefaultProvider, allZones sets.Set[string]) *DefaultProvider {
@@ -72,7 +77,7 @@ func (p *DefaultProvider) GetInstanceType(ctx context.Context, class *v1alpha1.Y
 		return nil, fmt.Errorf("instance type %s not found", instanceTypeName)
 	}
 
-	resolved := p.resolver.Resolve(ctx, base, class)
+	resolved := p.resolver.Resolve(ctx, base.info, class, base.canBePreemptible)
 
 	withOfferings := p.offeringProvider.InjectOfferings(ctx, []*cloudprovider.InstanceType{resolved}, p.allZones, class)
 	if len(withOfferings) == 0 {
@@ -109,14 +114,14 @@ func (p *DefaultProvider) generateInstanceTypes(platform yandex.PlatformId, conf
 	return res
 }
 
-func (p *DefaultProvider) buildNamesInstanceType() map[string]yandex.InstanceType {
-	names := make(map[string]yandex.InstanceType)
+func (p *DefaultProvider) buildNamesInstanceType() map[string]infoInstanceType {
+	names := make(map[string]infoInstanceType)
 	for platform, configs := range p.configuration {
 		for _, configuration := range configs {
 			types := p.generateInstanceTypes(platform, configuration)
 			for _, t := range types {
 				name := t.String()
-				names[name] = t
+				names[name] = infoInstanceType{info: t, canBePreemptible: configuration.CanBePreemptible}
 			}
 		}
 	}
