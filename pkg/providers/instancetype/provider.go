@@ -77,7 +77,7 @@ func (p *DefaultProvider) generateTypesFor(ctx context.Context, platform yandex.
 		types := p.generateInstanceTypes(platform, configuration)
 
 		for _, t := range types {
-			res = append(res, p.resolver.Resolve(ctx, t, class))
+			res = append(res, p.resolver.Resolve(ctx, t, class, configuration.CanBePreemptible))
 		}
 	}
 	return p.offeringProvider.InjectOfferings(ctx, res, p.allZones, class), nil

@@ -39,12 +39,6 @@ spec:
           spec:
             description: Spec defines the desired state of YandexNodeClass
             properties:
-              can_be_preemptible:
-                default: false
-                description: |-
-                  CanBePreemptible determines if the nodes can be preemptible
-                  By default, nodes are not preemptible
-                type: boolean
               core_fractions:
                 description: |-
                   CoreFractions is the list of core fractions to use for the nodes
