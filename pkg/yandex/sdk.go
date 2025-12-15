@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/samber/lo"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/apis/v1alpha1"
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1"
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/k8s/v1"
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/vpc/v1"
@@ -33,7 +34,7 @@ type SDK interface {
 		preemptible bool,
 		zoneId string,
 		subnetId string,
-		securityGroupIds []string,
+		nodeclass *v1alpha1.YandexNodeClass,
 		diskType string,
 		diskSize int64,
 	) (string, error)
@@ -129,7 +130,7 @@ func (p *YCSDK) CreateFixedNodeGroup(
 	preemptible bool,
 	zoneId string,
 	subnetId string,
-	securityGroupIds []string,
+	nodeclass *v1alpha1.YandexNodeClass,
 	diskType string,
 	diskSize int64,
 ) (string, error) {
@@ -168,11 +169,11 @@ func (p *YCSDK) CreateFixedNodeGroup(
 				{
 					SubnetIds:            []string{subnetId},
 					PrimaryV4AddressSpec: &k8s.NodeAddressSpec{},
-					SecurityGroupIds:     securityGroupIds,
+					SecurityGroupIds:     nodeclass.Spec.SecurityGroups,
 				},
 			},
 			NetworkSettings: &k8s.NodeTemplate_NetworkSettings{
-				Type: lo.If(coreFraction == CoreFraction100,
+				Type: lo.If(nodeclass.Spec.SoftwareAcceleratedNetworkSettings && coreFraction == CoreFraction100,
 					k8s.NodeTemplate_NetworkSettings_SOFTWARE_ACCELERATED,
 				).Else(k8s.NodeTemplate_NetworkSettings_STANDARD),
 			},

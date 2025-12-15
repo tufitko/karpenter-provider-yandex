@@ -77,6 +77,11 @@ type YandexNodeClassSpec struct {
 	// SecurityGroups to apply to the VMs
 	// +optional
 	SecurityGroups []string `json:"securityGroups,omitempty"`
+
+	// SoftwareAcceleratedNetworkSettings is a flag to enable software accelerated network settings
+	// +optional
+	// +kubebuilder:default=false
+	SoftwareAcceleratedNetworkSettings bool `json:"softwareAcceleratedNetworkSettings,omitempty"`
 }
 
 // CoreFraction is a string representation of a core fraction

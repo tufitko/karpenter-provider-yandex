@@ -187,7 +187,7 @@ func (c CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 		offering.CapacityType() == karpv1.CapacityTypeSpot,
 		offering.Zone(),
 		zoneToSubnet[offering.Zone()].ID,
-		nodeClass.Spec.SecurityGroups,
+		nodeClass,
 		diskType,
 		diskSize,
 	)
