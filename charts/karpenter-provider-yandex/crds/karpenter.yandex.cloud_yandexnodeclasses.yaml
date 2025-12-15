@@ -100,6 +100,11 @@ spec:
                 items:
                   type: string
                 type: array
+              softwareAcceleratedNetworkSettings:
+                default: false
+                description: SoftwareAcceleratedNetworkSettings is a flag to enable
+                  software accelerated network settings
+                type: boolean
               subnetSelectorTerms:
                 description: SubnetSelectorTerms is a list of subnet selector terms.
                   The terms are ORed.
