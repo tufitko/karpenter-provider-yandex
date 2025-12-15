@@ -8,6 +8,8 @@
 *.so
 *.dylib
 
+# Terraform
+crds.tf
 # Test binary, built with `go test -c`
 *.test
 

@@ -176,3 +176,16 @@ images-checks: images
 .PHONY: images-cosign
 images-cosign:
 	@cosign sign --yes $(COSING_ARGS) --recursive $(IMAGE):$(TAG)
+
+.PHONY: crds-tf
+crds-tf:
+	@echo "Converting CRD YAML files to Terraform format..."
+	@rm -f crds.tf
+	@for file in pkg/apis/crds/*.yaml; do \
+		echo "# Generated from: $$file" >> crds.tf; \
+		echo "" >> crds.tf; \
+		tfk8s convert -f "$$file" >> crds.tf 2>&1 || (echo "Error converting $$file" && exit 1); \
+		echo "" >> crds.tf; \
+		echo "" >> crds.tf; \
+	done
+	@echo "Done! Generated crds.tf ($(shell wc -l < crds.tf) lines)"
