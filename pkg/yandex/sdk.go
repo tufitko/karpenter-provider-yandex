@@ -134,6 +134,18 @@ func (p *YCSDK) CreateFixedNodeGroup(
 	diskType string,
 	diskSize int64,
 ) (string, error) {
+	// guard against duplicated node groups
+	// this can be removed after stabilization of api and karpenter
+	existedNodeGroups, err := p.ListNodeGroups(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to list node groups: %w", err)
+	}
+	for _, existedNodeGroup := range existedNodeGroups {
+		if existedNodeGroup.Name == name {
+			return existedNodeGroup.Id, nil
+		}
+	}
+
 	labels = maps.Clone(labels)
 	labels["managed-by"] = "karpenter"
 	for k, v := range nodeLabels {
