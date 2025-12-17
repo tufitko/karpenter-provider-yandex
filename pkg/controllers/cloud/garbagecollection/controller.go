@@ -34,7 +34,7 @@ func NewController(
 }
 
 func (c *Controller) Reconcile(ctx context.Context) (reconciler.Result, error) {
-	ctx = injection.WithControllerName(ctx, "cloud-garbage-collection")
+	ctx = injection.WithControllerName(ctx, "cloud.garbagecollection")
 
 	log.FromContext(ctx).Info("garbage collection start")
 
@@ -54,7 +54,7 @@ func (c *Controller) Reconcile(ctx context.Context) (reconciler.Result, error) {
 			continue
 		}
 
-		if node.Status != k8s.Node_PROVISIONING {
+		if nodeGroup.Status != k8s.NodeGroup_PROVISIONING {
 			continue
 		}
 		if node.CloudStatus.GetStatus() != "CREATING_INSTANCE" {
@@ -78,7 +78,7 @@ func (c *Controller) Reconcile(ctx context.Context) (reconciler.Result, error) {
 
 func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 	return controllerruntime.NewControllerManagedBy(m).
-		Named("cloud-garbage-collection").
+		Named("cloud.garbagecollection").
 		WatchesRawSource(singleton.Source()).
 		Complete(singleton.AsReconciler(c))
 }
