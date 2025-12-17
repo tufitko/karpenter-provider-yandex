@@ -13,6 +13,8 @@ import (
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/k8s/v1"
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/vpc/v1"
 	ycsdk "github.com/yandex-cloud/go-sdk"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 	"k8s.io/apimachinery/pkg/api/resource"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 )
@@ -44,6 +46,9 @@ type SDK interface {
 	GetNodeGroupByProviderId(ctx context.Context, providerId string) (*k8s.NodeGroup, error)
 	ListNodeGroups(ctx context.Context) ([]*k8s.NodeGroup, error)
 	GetNodeFromNodeGroup(ctx context.Context, nodeGroupId string) (*k8s.Node, error)
+	SecurityGroupExists(ctx context.Context, securityGroupId string) (bool, error)
+	SubnetExists(ctx context.Context, subnetId string) (bool, error)
+	GetSubnet(ctx context.Context, subnetId string) (*vpc.Subnet, error)
 }
 
 type YCSDK struct {
@@ -314,4 +319,38 @@ func (p *YCSDK) GetNodeFromNodeGroup(ctx context.Context, nodeGroupId string) (*
 		return nil, fmt.Errorf("nodes not found")
 	}
 	return nodes.Nodes[0], nil
+}
+
+func (p *YCSDK) SecurityGroupExists(ctx context.Context, securityGroupId string) (bool, error) {
+	sg, err := p.SDK.VPC().SecurityGroup().Get(ctx, &vpc.GetSecurityGroupRequest{
+		SecurityGroupId: securityGroupId,
+	})
+	if err == nil {
+		networkID, err := p.NetworkID(ctx)
+		if err != nil {
+			return false, err
+		}
+		if sg.NetworkId != "" && sg.NetworkId != networkID {
+			return false, nil
+		}
+		return true, nil
+	}
+
+	if grpcstatus.Code(err) == codes.NotFound {
+		return false, nil
+	}
+	return false, err
+}
+
+func (p *YCSDK) GetSubnet(ctx context.Context, subnetId string) (*vpc.Subnet, error) {
+	sn, err := p.SDK.VPC().Subnet().Get(ctx, &vpc.GetSubnetRequest{
+		SubnetId: subnetId,
+	})
+	if err != nil {
+		if grpcstatus.Code(err) == codes.NotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return sn, nil
 }

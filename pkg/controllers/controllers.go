@@ -42,7 +42,7 @@ func NewControllers(ctx context.Context,
 ) []controller.Controller {
 
 	controllers := []controller.Controller{
-		nodeclass.NewController(kubeClient, recorder, subnetProvider, validationCache, false),
+		nodeclass.NewController(kubeClient, recorder, subnetProvider, validationCache, sdk, false),
 		garbagecollection.NewController(kubeClient, cloudProvider),
 		cloudgarbagecollection.NewController(clk, sdk),
 	}

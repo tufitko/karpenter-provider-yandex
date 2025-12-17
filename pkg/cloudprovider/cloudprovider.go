@@ -210,7 +210,6 @@ func (c CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 // Karpenter will keep retrying until Delete returns a NodeClaimNotFound error.
 func (c CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim) error {
 	log := c.log.WithName("Delete()")
-	log.Info("Executed with params", "nodeClaim", nodeClaim.Name)
 
 	nodeGroupId := nodeClaim.Labels["yandex.cloud/node-group-id"]
 	if nodeGroupId == "" {
@@ -222,7 +221,7 @@ func (c CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 	if err != nil {
 		// Check if this is a NotFound error (NodeGroup already deleted by another NodeClaim)
 		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "NotFound") {
-			log.Info("NodeGroup already deleted", "nodeGroupId", nodeGroupId)
+			log.Info("Executed with params", "nodeClaim", nodeClaim.Name, "NodeGroup deleted, nodeGroupId", nodeGroupId)
 			// Return NodeClaimNotFoundError to signal that the instance is already terminated
 			return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("nodegroup %s not found", nodeGroupId))
 		}
@@ -230,14 +229,12 @@ func (c CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 		return err
 	}
 
-	log.Info("Successfully deleted NodeGroup", "nodeGroupId", nodeGroupId)
 	return nil
 }
 
 // Get retrieves a NodeClaim from the cloudprovider by its provider id
 func (c CloudProvider) Get(ctx context.Context, providerID string) (*karpv1.NodeClaim, error) {
 	log := c.log.WithName("Get()")
-	log.Info("Executed with params", "providerID", providerID)
 
 	if providerID == "" {
 		return nil, fmt.Errorf("providerID is empty")
