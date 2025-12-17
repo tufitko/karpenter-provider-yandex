@@ -74,6 +74,8 @@ func main() {
 			op.SubnetProvider,
 			op.ValidationCache,
 			cloudProvider,
+			op.Clock,
+			op.SDK,
 		)...).
 		Start(ctx)
 }

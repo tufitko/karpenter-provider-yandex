@@ -43,6 +43,7 @@ type SDK interface {
 	ProviderIdFor(ctx context.Context, nodeGroupId string) (string, error)
 	GetNodeGroupByProviderId(ctx context.Context, providerId string) (*k8s.NodeGroup, error)
 	ListNodeGroups(ctx context.Context) ([]*k8s.NodeGroup, error)
+	GetNodeFromNodeGroup(ctx context.Context, nodeGroupId string) (*k8s.Node, error)
 }
 
 type YCSDK struct {
@@ -300,4 +301,17 @@ func (p *YCSDK) ListNodeGroups(ctx context.Context) ([]*k8s.NodeGroup, error) {
 	return lo.Filter(ngs, func(item *k8s.NodeGroup, _ int) bool {
 		return item.ClusterId == p.clusterID && item.Labels["managed-by"] == "karpenter"
 	}), nil
+}
+
+func (p *YCSDK) GetNodeFromNodeGroup(ctx context.Context, nodeGroupId string) (*k8s.Node, error) {
+	nodes, err := p.SDK.Kubernetes().NodeGroup().ListNodes(ctx, &k8s.ListNodeGroupNodesRequest{
+		NodeGroupId: nodeGroupId,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(nodes.Nodes) == 0 {
+		return nil, fmt.Errorf("nodes not found")
+	}
+	return nodes.Nodes[0], nil
 }
