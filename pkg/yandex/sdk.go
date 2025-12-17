@@ -47,7 +47,6 @@ type SDK interface {
 	ListNodeGroups(ctx context.Context) ([]*k8s.NodeGroup, error)
 	GetNodeFromNodeGroup(ctx context.Context, nodeGroupId string) (*k8s.Node, error)
 	SecurityGroupExists(ctx context.Context, securityGroupId string) (bool, error)
-	SubnetExists(ctx context.Context, subnetId string) (bool, error)
 	GetSubnet(ctx context.Context, subnetId string) (*vpc.Subnet, error)
 }
 
