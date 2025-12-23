@@ -21,6 +21,7 @@ import (
 	_ "embed"
 	"fmt"
 	"maps"
+	"math/rand"
 	"sort"
 	"time"
 
@@ -128,9 +129,6 @@ func (c CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 	zoneToSubnet := lo.SliceToMap(subnets, func(s subnet.Subnet) (string, subnet.Subnet) {
 		return s.ZoneID, s
 	})
-	zoneToAvailabeIPs := lo.SliceToMap(subnets, func(s subnet.Subnet) (string, int) {
-		return s.ZoneID, s.AvailableIPAddressCount
-	})
 
 	instanceTypes = lo.Filter(instanceTypes, func(it *cloudprovider.InstanceType, _ int) bool {
 		offerings := lo.Filter(it.Offerings, func(off *cloudprovider.Offering, _ int) bool {
@@ -148,11 +146,21 @@ func (c CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 
 	it := instanceTypes[0]
 
-	offering := it.Offerings.Available().Cheapest()
-	for _, off := range it.Offerings.Available() {
-		if zoneToAvailabeIPs[offering.Zone()] < zoneToAvailabeIPs[off.Zone()] {
-			offering = off
-		}
+	availableOfferings := it.Offerings.Available()
+
+	spotOfferings := lo.Filter(availableOfferings, func(off *cloudprovider.Offering, _ int) bool {
+		return off.CapacityType() == karpv1.CapacityTypeSpot
+	})
+
+	// This is very bad, but at the moment there is no normal way to check the availability of a zone to raise a node,
+	// so in order to avoid constantly raising nodes in an inaccessible zone,
+	// we will choose offering with a random zone.
+	var offering *cloudprovider.Offering
+
+	if len(spotOfferings) > 0 {
+		offering = spotOfferings[rand.Intn(len(spotOfferings))]
+	} else {
+		offering = availableOfferings[rand.Intn(len(availableOfferings))]
 	}
 
 	var yait yandex.InstanceType
