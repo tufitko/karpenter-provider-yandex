@@ -21,6 +21,7 @@ import (
 
 	"github.com/tufitko/karpenter-provider-yandex/pkg/apis/v1alpha1"
 	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/subnet"
+	"github.com/tufitko/karpenter-provider-yandex/pkg/yandex"
 	"go.uber.org/multierr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/karpenter/pkg/operator/injection"
@@ -60,9 +61,10 @@ func NewController(
 	recorder events.Recorder,
 	subnetProvider subnet.Provider,
 	validationCache *cache.Cache,
+	sdk yandex.SDK,
 	disableDryRun bool,
 ) *Controller {
-	validation := NewValidationReconciler(kubeClient, validationCache, disableDryRun)
+	validation := NewValidationReconciler(kubeClient, validationCache, sdk, disableDryRun)
 	return &Controller{
 		kubeClient: kubeClient,
 		recorder:   recorder,
