@@ -47,7 +47,6 @@ type SDK interface {
 	ListNodeGroups(ctx context.Context) ([]*k8s.NodeGroup, error)
 	GetNodeFromNodeGroup(ctx context.Context, nodeGroupId string) (*k8s.Node, error)
 	SecurityGroupExists(ctx context.Context, securityGroupId string) (bool, error)
-	GetSubnet(ctx context.Context, subnetId string) (*vpc.Subnet, error)
 }
 
 type YCSDK struct {
@@ -339,17 +338,4 @@ func (p *YCSDK) SecurityGroupExists(ctx context.Context, securityGroupId string)
 		return false, nil
 	}
 	return false, err
-}
-
-func (p *YCSDK) GetSubnet(ctx context.Context, subnetId string) (*vpc.Subnet, error) {
-	sn, err := p.SDK.VPC().Subnet().Get(ctx, &vpc.GetSubnetRequest{
-		SubnetId: subnetId,
-	})
-	if err != nil {
-		if grpcstatus.Code(err) == codes.NotFound {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return sn, nil
 }

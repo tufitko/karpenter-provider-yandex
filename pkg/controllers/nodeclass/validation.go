@@ -37,7 +37,7 @@ const (
 	GB                                  int64 = 1 << 30
 	TB                                  int64 = 1 << 40
 	stepNetworkDiskBytes                      = 4 * MB
-	maxDefaultBytes                           = 8 * TB // The block_size is not set in the provider. Default block_size=4KB, maximum disk size for block_size 4KB = 8TB.
+	maxDefaultBytes                           = 4 * TB
 	stepNonReplicated                         = 93 * GB
 )
 
@@ -124,26 +124,6 @@ func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.YandexNo
 		return reconcile.Result{RequeueAfter: requeueAfterTime}, nil
 	}
 
-	if reason, msg := validateSubnetsExist(ctx, v.sdk, nodeClass); reason != "" {
-		nodeClass.StatusConditions().SetFalse(
-			v1alpha1.ConditionTypeValidationSucceeded,
-			reason,
-			msg,
-		)
-		v.cache.SetDefault(v.cacheKey(nodeClass), reason)
-		return reconcile.Result{RequeueAfter: requeueAfterTime}, nil
-	}
-
-	if reason, msg := validateSecurityGroupsExist(ctx, v.sdk, nodeClass); reason != "" {
-		nodeClass.StatusConditions().SetFalse(
-			v1alpha1.ConditionTypeValidationSucceeded,
-			reason,
-			msg,
-		)
-		v.cache.SetDefault(v.cacheKey(nodeClass), reason)
-		return reconcile.Result{RequeueAfter: requeueAfterTime}, nil
-	}
-
 	if reason, msg := validateSAN(nodeClass.Spec); reason != "" {
 		nodeClass.StatusConditions().SetFalse(
 			v1alpha1.ConditionTypeValidationSucceeded,
@@ -151,6 +131,22 @@ func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.YandexNo
 			msg,
 		)
 		v.cache.SetDefault(v.cacheKey(nodeClass), reason)
+		return reconcile.Result{RequeueAfter: requeueAfterTime}, nil
+	}
+
+	if reason, msg := validateSubnetsExist(ctx, v.sdk, nodeClass); reason != "" {
+		nodeClass.StatusConditions().SetFalse(v1alpha1.ConditionTypeValidationSucceeded, reason, msg)
+		if shouldCacheValidationFailure(reason) {
+			v.cache.SetDefault(v.cacheKey(nodeClass), reason)
+		}
+		return reconcile.Result{RequeueAfter: requeueAfterTime}, nil
+	}
+
+	if reason, msg := validateSecurityGroupsExist(ctx, v.sdk, nodeClass); reason != "" {
+		nodeClass.StatusConditions().SetFalse(v1alpha1.ConditionTypeValidationSucceeded, reason, msg)
+		if shouldCacheValidationFailure(reason) {
+			v.cache.SetDefault(v.cacheKey(nodeClass), reason)
+		}
 		return reconcile.Result{RequeueAfter: requeueAfterTime}, nil
 	}
 
@@ -208,7 +204,7 @@ func rulesForDiskType(t string) (diskRules, bool) {
 		return diskRules{
 			minBytes:  stepNonReplicated,
 			stepBytes: stepNonReplicated,
-			maxBytes:  256 * TB,
+			maxBytes:  maxDefaultBytes,
 		}, true
 	default:
 		return diskRules{}, false
@@ -228,9 +224,9 @@ func validateDisk(spec v1alpha1.YandexNodeClassSpec) (reason, msg string) {
 		diskType = "network-ssd"
 	}
 
-	r, ok := rulesForDiskType(spec.DiskType)
+	r, ok := rulesForDiskType(diskType)
 	if !ok {
-		return "InvalidDiskType", fmt.Sprintf("unsupported spec.diskType=%q", spec.DiskType)
+		return "InvalidDiskType", fmt.Sprintf("unsupported spec.diskType=%q", diskType)
 	}
 
 	if r.minBytes > 0 && sizeBytes < r.minBytes {
@@ -267,16 +263,50 @@ func validateDisk(spec v1alpha1.YandexNodeClassSpec) (reason, msg string) {
 	return "", ""
 }
 
-// validateSubnetsExist verifies that all resolved subnets in nodeClass.Status.Subnets
-// still exist in Yandex Cloud, belong to the cluster network, and (if present) match the stored ZoneID.
+// validateSubnetsExist ensures subnetSelectorTerms matches at least one subnet and that resolved status.subnets (if any) still match it (including ZoneID when set).
 func validateSubnetsExist(ctx context.Context, yc yandex.SDK, nodeClass *v1alpha1.YandexNodeClass) (reason, msg string) {
-	if len(nodeClass.Status.Subnets) == 0 {
-		return "NoSubnetsResolved", "no subnets resolved in status"
+	if len(nodeClass.Spec.SubnetSelectorTerms) == 0 {
+		return "InvalidSubnetSelector", "spec.subnetSelectorTerms must not be empty"
 	}
 
-	networkID, err := yc.NetworkID(ctx)
+	subnets, err := yc.ListNetworkSubnets(ctx)
 	if err != nil {
-		return "SubnetLookupFailed", "failed to get cluster network id: " + err.Error()
+		return "SubnetLookupFailed", "failed to list network subnets: " + err.Error()
+	}
+
+	matched := make(map[string]string)
+	for _, subnet := range subnets {
+		if subnet == nil || subnet.Id == "" {
+			continue
+		}
+
+		keep := false
+		for _, term := range nodeClass.Spec.SubnetSelectorTerms {
+			if term.ID != "" && subnet.Id == term.ID {
+				keep = true
+				break
+			}
+			if len(term.Labels) == 0 {
+				continue
+			}
+			if yandex.MatchLabels(subnet.Labels, term.Labels) {
+				keep = true
+				break
+			}
+		}
+		if !keep {
+			continue
+		}
+
+		matched[subnet.Id] = subnet.ZoneId
+	}
+
+	if len(matched) == 0 {
+		return "NoSubnetsMatched", "no subnets in the cluster network match spec.subnetSelectorTerms"
+	}
+
+	if len(nodeClass.Status.Subnets) == 0 {
+		return "", ""
 	}
 
 	seen := make(map[string]struct{}, len(nodeClass.Status.Subnets))
@@ -289,20 +319,13 @@ func validateSubnetsExist(ctx context.Context, yc yandex.SDK, nodeClass *v1alpha
 		}
 		seen[st.ID] = struct{}{}
 
-		sn, err := yc.GetSubnet(ctx, st.ID)
-		if err != nil {
-			return "SubnetLookupFailed", "failed to get subnet " + st.ID + ": " + err.Error()
-		}
-		if sn == nil {
-			return "SubnetNotFound", "subnet not found: " + st.ID
+		zoneID, ok := matched[st.ID]
+		if !ok {
+			return "SubnetSelectorMismatch", "resolved subnet does not match spec.subnetSelectorTerms: " + st.ID
 		}
 
-		if sn.NetworkId != "" && sn.NetworkId != networkID {
-			return "SubnetNotFound", "subnet not in cluster network: " + st.ID
-		}
-
-		if st.ZoneID != "" && sn.ZoneId != "" && st.ZoneID != sn.ZoneId {
-			return "SubnetZoneMismatch", "subnet zone mismatch for " + st.ID + ": status=" + st.ZoneID + ", cloud=" + sn.ZoneId
+		if st.ZoneID != "" && zoneID != "" && st.ZoneID != zoneID {
+			return "SubnetZoneMismatch", "subnet zone mismatch for " + st.ID + ": status=" + st.ZoneID + ", cloud=" + zoneID
 		}
 	}
 
@@ -343,4 +366,13 @@ func validateSAN(spec v1alpha1.YandexNodeClassSpec) (reason, msg string) {
 
 	return "InvalidSANCoreFractions",
 		"softwareAcceleratedNetworkSettings=true requires core_fractions to include 100 "
+}
+
+func shouldCacheValidationFailure(reason string) bool {
+	switch reason {
+	case "SubnetLookupFailed", "SecurityGroupLookupFailed":
+		return false
+	default:
+		return true
+	}
 }
