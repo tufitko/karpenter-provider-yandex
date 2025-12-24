@@ -85,7 +85,7 @@ type YandexNodeClassSpec struct {
 }
 
 // CoreFraction is a string representation of a core fraction
-// +kubebuilder:validation:Enum=5;20;50;100
+// +kubebuilder:validation:Enum="5";"20";"50";"100"
 type CoreFraction string
 
 // YandexNodeClass is the Schema for the YandexNodeClass API
