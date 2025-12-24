@@ -46,10 +46,10 @@ spec:
                 items:
                   description: CoreFraction is a string representation of a core fraction
                   enum:
-                  - 5
-                  - 20
-                  - 50
-                  - 100
+                  - "5"
+                  - "20"
+                  - "50"
+                  - "100"
                   type: string
                 type: array
               diskSize:
