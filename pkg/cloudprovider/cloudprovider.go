@@ -112,7 +112,7 @@ func (c CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 
 	nodeClassReady := nodeClass.StatusConditions().Get(status.ConditionReady)
 	if nodeClassReady.IsFalse() {
-		return nil, cloudprovider.NewNodeClassNotReadyError(fmt.Errorf(nodeClassReady.Message))
+		return nil, cloudprovider.NewNodeClassNotReadyError(fmt.Errorf("%s", nodeClassReady.Message))
 	}
 	if nodeClassReady.IsUnknown() {
 		return nil, cloudprovider.NewCreateError(fmt.Errorf("resolving nodeclass readiness, nodeclass is in Ready=Unknown, %s", nodeClassReady.Message), "NodeClassReadinessUnknown", "NodeClass is in Ready=Unknown")
