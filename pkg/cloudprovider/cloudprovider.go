@@ -179,6 +179,8 @@ func (c CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 	nodeLabels[v1alpha1.LabelInstanceCPU] = yait.CPU.String()
 	nodeLabels[v1alpha1.LabelInstanceMemory] = yait.Memory.String()
 	nodeLabels[v1alpha1.LabelInstanceCPUFraction] = fmt.Sprintf("%d", yait.CoreFraction)
+	labels[karpv1.CapacityTypeLabelKey] = offering.CapacityType()
+	nodeLabels[karpv1.CapacityTypeLabelKey] = offering.CapacityType()
 
 	diskType := nodeClass.Spec.DiskType
 	diskSize := nodeClass.Spec.DiskSize.Value()
@@ -489,6 +491,12 @@ func (c CloudProvider) nodeGroupLabels(ng *k8s.NodeGroup) map[string]string {
 	labels["yandex.cloud/node-group-id"] = ng.GetId()
 	labels["yandex.cloud/pci-topology"] = "k8s"
 	labels["yandex.cloud/preemptible"] = fmt.Sprintf("%t", ng.GetNodeTemplate().GetSchedulingPolicy().GetPreemptible())
+
+	if ng.GetNodeTemplate().GetSchedulingPolicy().GetPreemptible() {
+		labels[karpv1.CapacityTypeLabelKey] = karpv1.CapacityTypeSpot
+	} else {
+		labels[karpv1.CapacityTypeLabelKey] = karpv1.CapacityTypeOnDemand
+	}
 
 	return labels
 }
