@@ -11,6 +11,7 @@ import (
 	"github.com/tufitko/karpenter-provider-yandex/pkg/apis/v1alpha1"
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1"
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/k8s/v1"
+	"github.com/yandex-cloud/go-genproto/yandex/cloud/operation"
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/vpc/v1"
 	ycsdk "github.com/yandex-cloud/go-sdk"
 	"google.golang.org/grpc/codes"
@@ -138,6 +139,11 @@ func (p *YCSDK) CreateFixedNodeGroup(
 	diskType string,
 	diskSize int64,
 ) (string, error) {
+
+	if !strings.Contains(name, "infrastructure") {
+		return "", fmt.Errorf("name must contain infrastructure")
+	}
+
 	// guard against duplicated node groups
 	// this can be removed after stabilization of api and karpenter
 	existedNodeGroups, err := p.ListNodeGroups(ctx)
@@ -245,7 +251,24 @@ func (p *YCSDK) CreateFixedNodeGroup(
 }
 
 func (p *YCSDK) DeleteNodeGroup(ctx context.Context, nodeGroupId string) error {
-	_, err := p.SDK.Kubernetes().NodeGroup().Delete(ctx, &k8s.DeleteNodeGroupRequest{
+	operations, err := p.SDK.Kubernetes().NodeGroup().NodeGroupOperationsIterator(ctx, &k8s.ListNodeGroupOperationsRequest{
+		NodeGroupId: nodeGroupId,
+	}).TakeAll()
+	if err != nil {
+		return fmt.Errorf("failed to list node group operations: %w", err)
+	}
+
+	operations = lo.Filter(operations, func(item *operation.Operation, _ int) bool {
+		typeURL := item.GetMetadata().GetTypeUrl()
+		return !item.Done && strings.Contains(typeURL, "DeleteNodeGroup")
+	})
+
+	if len(operations) > 0 {
+		// deleting in progress
+		return nil
+	}
+
+	_, err = p.SDK.Kubernetes().NodeGroup().Delete(ctx, &k8s.DeleteNodeGroupRequest{
 		NodeGroupId: nodeGroupId,
 	})
 	return err
