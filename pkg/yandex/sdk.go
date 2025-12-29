@@ -139,11 +139,6 @@ func (p *YCSDK) CreateFixedNodeGroup(
 	diskType string,
 	diskSize int64,
 ) (string, error) {
-
-	if !strings.Contains(name, "infrastructure") {
-		return "", fmt.Errorf("name must contain infrastructure")
-	}
-
 	// guard against duplicated node groups
 	// this can be removed after stabilization of api and karpenter
 	existedNodeGroups, err := p.ListNodeGroups(ctx)
