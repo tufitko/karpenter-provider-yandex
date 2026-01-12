@@ -309,19 +309,22 @@ func (c CloudProvider) List(ctx context.Context) ([]*karpv1.NodeClaim, error) {
 		var nodeClass *v1alpha1.YandexNodeClass
 		nodeClass, err = c.resolveNodeClassFromNodeGroup(ctx, ng)
 		if err != nil {
-			return nil, fmt.Errorf("failed to resolve yandex node class %s: %w", ng.GetName(), err)
+			log.Error(err, "failed to resolve yandex node class", "nodeGroup", ng.GetName())
+			continue
 		}
 
 		var it *cloudprovider.InstanceType
 		it, err = c.nodeGroupToInstanceType(ctx, ng, nodeClass)
 		if err != nil {
-			return nil, fmt.Errorf("failed to resolve instance type %s, %s: %w", ng.GetName(), nodeClass.Name, err)
+			log.Error(err, "failed to resolve instance type", "nodeGroup", ng.GetName(), "nodeClass", nodeClass.Name)
+			continue
 		}
 
 		var nc *karpv1.NodeClaim
 		nc, err = c.nodeGroupToNodeClaim(ctx, ng, it)
 		if err != nil {
-			return nil, fmt.Errorf("failed to find node group %s: %w", ng.Name, err)
+			log.Error(err, "failed to find node group", "nodeGroup", ng.Name)
+			continue
 		}
 
 		nodeClaims = append(nodeClaims, nc)
