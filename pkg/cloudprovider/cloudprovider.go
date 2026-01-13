@@ -133,9 +133,20 @@ func (c CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 		return nil, fmt.Errorf("resolving nodeclass, %w", err)
 	}
 
+	nodeClassReady := nodeClass.StatusConditions().Get(status.ConditionReady)
+	if nodeClassReady.IsFalse() {
+		return nil, cloudprovider.NewNodeClassNotReadyError(fmt.Errorf("%s", nodeClassReady.Message))
+	}
+	if nodeClassReady.IsUnknown() {
+		return nil, cloudprovider.NewCreateError(fmt.Errorf("resolving nodeclass readiness, nodeclass is in Ready=Unknown, %s", nodeClassReady.Message), "NodeClassReadinessUnknown", "NodeClass is in Ready=Unknown")
+	}
+	if nodeClassReady != nil && nodeClassReady.ObservedGeneration != nodeClass.Generation {
+		return nil, cloudprovider.NewNodeClassNotReadyError(fmt.Errorf("nodeclass status has not been reconciled against the latest spec"))
+	}
+
 	instanceTypes, err := c.resolveInstanceTypes(ctx, nodeClaim, nodeClass)
 	if err != nil {
-		return nil, fmt.Errorf("resolving instance types, %w", err)
+		return nil, cloudprovider.NewCreateError(fmt.Errorf("resolving instance types, %w", err), "InstanceTypeResolutionFailed", "Error resolving instance types")
 	}
 
 	if len(instanceTypes) == 0 {
@@ -353,10 +364,18 @@ func (c CloudProvider) List(ctx context.Context) ([]*karpv1.NodeClaim, error) {
 func (c CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *karpv1.NodePool) ([]*cloudprovider.InstanceType, error) {
 	nodeClass, err := c.resolveNodeClassFromNodePool(ctx, nodePool)
 	if err != nil {
+		if errors.IsNotFound(err) {
+			c.recorder.Publish(cloudproviderevents.NodePoolFailedToResolveNodeClass(nodePool))
+			return nil, nil
+		}
 		return nil, fmt.Errorf("resolving nodeClass, %w", err)
 	}
 
-	return c.instanceTypes.List(ctx, nodeClass)
+	instanceTypes, err := c.instanceTypes.List(ctx, nodeClass)
+	if err != nil {
+		return nil, fmt.Errorf("listing instance types, %w", err)
+	}
+	return instanceTypes, nil
 }
 
 // IsDrifted returns whether a NodeClaim has drifted from the provisioning requirements
