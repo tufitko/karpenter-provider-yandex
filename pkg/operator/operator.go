@@ -21,19 +21,14 @@ import (
 	"os"
 
 	"github.com/patrickmn/go-cache"
-	"github.com/samber/lo"
 	"github.com/tufitko/karpenter-provider-yandex/pkg/operator/options"
 	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/instancetype/offering"
 	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/pricing"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/operator"
 
 	"time"
@@ -125,30 +120,4 @@ func KubeDNSIP(ctx context.Context, kubernetesInterface kubernetes.Interface) (n
 		return nil, fmt.Errorf("parsing cluster IP")
 	}
 	return kubeDNSIP, nil
-}
-
-func SetupIndexers(ctx context.Context, mgr manager.Manager) {
-	lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &karpv1.NodeClaim{}, "status.instanceID", func(o client.Object) []string {
-		if o.(*karpv1.NodeClaim).Status.ProviderID == "" {
-			return nil
-		}
-		// Parse Yandex providerID format: "yandex://instance-id"
-		providerID := o.(*karpv1.NodeClaim).Status.ProviderID
-		if len(providerID) > 9 && providerID[:9] == "yandex://" {
-			return []string{providerID[9:]}
-		}
-		return nil
-	}), "failed to setup nodeclaim instanceID indexer")
-
-	lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &corev1.Node{}, "spec.instanceID", func(o client.Object) []string {
-		if o.(*corev1.Node).Spec.ProviderID == "" {
-			return nil
-		}
-		// Parse Yandex providerID format: "yandex://instance-id"
-		providerID := o.(*corev1.Node).Spec.ProviderID
-		if len(providerID) > 9 && providerID[:9] == "yandex://" {
-			return []string{providerID[9:]}
-		}
-		return nil
-	}), "failed to setup node instanceID indexer")
 }
