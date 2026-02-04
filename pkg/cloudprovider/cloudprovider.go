@@ -23,9 +23,9 @@ import (
 	"maps"
 	"math/rand"
 	"sort"
+	"strings"
 	"time"
 
-	"github.com/patrickmn/go-cache"
 	"github.com/tufitko/karpenter-provider-yandex/pkg/apis"
 	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/instancetype"
 	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/subnet"
@@ -35,8 +35,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/karpenter/pkg/events"
-
-	"strings"
 
 	"github.com/awslabs/operatorpkg/status"
 	"github.com/go-logr/logr"
@@ -59,9 +57,6 @@ import (
 const (
 	CloudProviderName    = "yandex"
 	YandexProviderPrefix = "yandex://"
-
-	// todo: temporary fix
-	creatingTTL = 5 * time.Minute
 )
 
 var _ cloudprovider.CloudProvider = (*CloudProvider)(nil)
@@ -75,8 +70,6 @@ type CloudProvider struct {
 	subnets       subnet.Provider
 
 	sdk yandex.SDK
-
-	c *cache.Cache
 }
 
 func NewCloudProvider(ctx context.Context,
@@ -95,7 +88,6 @@ func NewCloudProvider(ctx context.Context,
 		recorder:      recorder,
 		instanceTypes: instanceTypes,
 		subnets:       subnets,
-		c:             cache.New(creatingTTL, time.Minute),
 	}
 	return provider, nil
 }
@@ -105,22 +97,6 @@ func NewCloudProvider(ctx context.Context,
 func (c CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) (*karpv1.NodeClaim, error) {
 	log := c.log.WithName("Create()")
 	log.Info("Executed with params", "nodePool", nodeClaim.Name, "spec", nodeClaim.Spec)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-
-		_, exp, exist := c.c.GetWithExpiration(nodeClaim.Name)
-		if exist && exp.After(time.Now()) {
-			time.Sleep(exp.Sub(time.Now()))
-		} else {
-			c.c.Set(nodeClaim.Name, true, creatingTTL)
-			break
-		}
-	}
 
 	nodeClass, err := c.resolveNodeClassFromNodeClaim(ctx, nodeClaim)
 	if err != nil {
@@ -270,6 +246,7 @@ func (c CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 			// Return NodeClaimNotFoundError to signal that the instance is already terminated
 			return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("nodegroup %s not found", nodeGroupId))
 		}
+		log.Error(err, "Failed to delete nodegroup", "nodeGroupId", nodeGroupId)
 		// Return other errors as-is for retry
 		return err
 	}
