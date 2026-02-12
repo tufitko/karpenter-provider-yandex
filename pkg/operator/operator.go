@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"time"
 
 	"github.com/patrickmn/go-cache"
 	"github.com/tufitko/karpenter-provider-yandex/pkg/operator/options"
@@ -30,8 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/karpenter/pkg/operator"
-
-	"time"
 
 	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/instancetype"
 	"github.com/tufitko/karpenter-provider-yandex/pkg/providers/subnet"
@@ -63,6 +62,8 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 		log.Error(err, "failed to build yandex sdk")
 		os.Exit(1)
 	}
+
+	cachedSdk := yandexsdk.NewCachedSDK(sdk)
 
 	maxPodsPerNode, err := sdk.MaxPodsPerNode(ctx)
 	if err != nil {
@@ -100,7 +101,7 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 
 	return ctx, &Operator{
 		Operator:             operator,
-		SDK:                  sdk,
+		SDK:                  cachedSdk,
 		ValidationCache:      validationCache,
 		InstanceTypeProvider: instanceTypeProvider,
 		SubnetProvider:       subnetProvider,
