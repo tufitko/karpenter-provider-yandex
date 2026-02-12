@@ -53,7 +53,7 @@ func (c CachedSDK) CreateFixedNodeGroup(
 		return value.(lo.Tuple2[string, error]).Unpack()
 	}
 
-	resp, err := c.CreateFixedNodeGroup(ctx, name, labels, nodeLabels, platformId, coreFraction, cpu, mem, preemptible, zoneId, subnetId, nodeclass, diskType, diskSize)
+	resp, err := c.SDK.CreateFixedNodeGroup(ctx, name, labels, nodeLabels, platformId, coreFraction, cpu, mem, preemptible, zoneId, subnetId, nodeclass, diskType, diskSize)
 
 	c.cache.Set(key, lo.Tuple2[string, error]{A: resp, B: err}, CacheTTL)
 
@@ -69,7 +69,7 @@ func (c CachedSDK) DeleteNodeGroup(ctx context.Context, nodeGroupId string) erro
 		return value.(error)
 	}
 
-	err := c.DeleteNodeGroup(ctx, nodeGroupId)
+	err := c.SDK.DeleteNodeGroup(ctx, nodeGroupId)
 
 	c.cache.Set(key, err, CacheTTL)
 
