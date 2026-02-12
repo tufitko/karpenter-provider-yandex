@@ -255,7 +255,7 @@ func (p *YCSDK) DeleteNodeGroup(ctx context.Context, nodeGroupId string) error {
 
 	operations = lo.Filter(operations, func(item *operation.Operation, _ int) bool {
 		typeURL := item.GetMetadata().GetTypeUrl()
-		return !item.Done && strings.Contains(typeURL, "DeleteNodeGroup")
+		return strings.Contains(typeURL, "DeleteNodeGroup")
 	})
 
 	if len(operations) > 0 {
