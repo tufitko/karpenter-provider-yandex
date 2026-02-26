@@ -66,6 +66,9 @@ func (c CachedSDK) DeleteNodeGroup(ctx context.Context, nodeGroupId string) erro
 
 	value, exist := c.cache.Get(key)
 	if exist {
+		if value == nil {
+			return nil
+		}
 		return value.(error)
 	}
 
