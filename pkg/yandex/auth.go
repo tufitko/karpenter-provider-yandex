@@ -1,19 +1,30 @@
 package yandex
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/url"
 	"os"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 	ycsdk "github.com/yandex-cloud/go-sdk"
-	"github.com/yandex-cloud/go-sdk/iamkey"
+	credentials "github.com/yandex-cloud/go-sdk/v2/credentials"
+	"github.com/yandex-cloud/go-sdk/v2/pkg/iamkey"
 )
 
 const (
-	IAMTokenEnv          = "YANDEX_IAM_TOKEN"
-	OauthTokenEnv        = "YANDEX_OAUTH_TOKEN"
-	ServiceAccountKeyEnv = "YANDEX_SERVICE_ACCOUNT_KEY"
+	IAMTokenEnv            = "YANDEX_IAM_TOKEN"
+	OauthTokenEnv          = "YANDEX_OAUTH_TOKEN"
+	ServiceAccountKeyEnv   = "YANDEX_SERVICE_ACCOUNT_KEY"
+	SAIdEnv                = "YANDEX_SA_ID"
+	SATokenFileEnv         = "YANDEX_SA_TOKEN_FILE"
+	yandexTokenExchangeURL = "https://auth.yandex.cloud/oauth/token"
+	oidcRefreshThreshold   = 5 * time.Minute
 )
 
 func buildSDK(ctx context.Context) (*ycsdk.SDK, error) {
@@ -27,15 +38,108 @@ func buildSDK(ctx context.Context) (*ycsdk.SDK, error) {
 	})
 }
 
-func credentialsFromEnv() (ycsdk.Credentials, error) {
+type tokenExchangeResponse struct {
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type"`
+	ExpiresIn   int    `json:"expires_in"`
+}
+
+// https://yandex.cloud/ru/docs/iam/operations/wlif/setup-wlif#exchange-jwt-for-iam
+func exchangeJWTForIAMToken(saID, jwt string) (accessToken string, expiresInSeconds int, err error) {
+	form := url.Values{}
+	form.Set("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
+	form.Set("requested_token_type", "urn:ietf:params:oauth:token-type:access_token")
+	form.Set("audience", saID)
+	form.Set("subject_token", jwt)
+	form.Set("subject_token_type", "urn:ietf:params:oauth:token-type:id_token")
+
+	req, err := http.NewRequest(http.MethodPost, yandexTokenExchangeURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return "", 0, errors.Wrap(err, "create token exchange request")
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", 0, errors.Wrap(err, "token exchange request")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var buf bytes.Buffer
+		_, _ = buf.ReadFrom(resp.Body)
+		return "", 0, errors.Errorf("token exchange failed: %s: %s", resp.Status, buf.String())
+	}
+
+	var out tokenExchangeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", 0, errors.Wrap(err, "decode token exchange response")
+	}
+	if out.AccessToken == "" {
+		return "", 0, errors.New("token exchange: empty access_token in response")
+	}
+	if out.ExpiresIn <= 0 {
+		out.ExpiresIn = 43200
+	}
+	return out.AccessToken, out.ExpiresIn, nil
+}
+
+type oidcCredentials struct {
+	saID   string
+	getJWT func() string
+
+	mu              sync.RWMutex
+	cachedToken     string
+	cachedExpiresAt time.Time
+}
+
+func (c *oidcCredentials) YandexCloudAPICredentials() {}
+
+func (c *oidcCredentials) IAMToken(ctx context.Context) (*credentials.CredentialsToken, error) {
+	c.mu.RLock()
+	if c.cachedToken != "" && c.cachedExpiresAt.After(time.Now().Add(oidcRefreshThreshold)) {
+		tok, exp := c.cachedToken, c.cachedExpiresAt
+		c.mu.RUnlock()
+		return &credentials.CredentialsToken{Token: tok, ExpiresAt: exp}, nil
+	}
+	c.mu.RUnlock()
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	jwt := c.getJWT()
+	if jwt == "" {
+		return nil, errors.New("OIDC: JWT is not set")
+	}
+	iamToken, expiresIn, err := exchangeJWTForIAMToken(c.saID, jwt)
+	if err != nil {
+		return nil, err
+	}
+	expiresAt := time.Now().Add(time.Duration(expiresIn) * time.Second)
+	c.cachedToken = iamToken
+	c.cachedExpiresAt = expiresAt
+	return &credentials.CredentialsToken{Token: iamToken, ExpiresAt: expiresAt}, nil
+}
+
+func getJWTFromEnv() string {
+	if path := os.Getenv(SATokenFileEnv); path != "" {
+		data, err := os.ReadFile(path)
+		if err == nil {
+			return strings.TrimSpace(string(data))
+		}
+	}
+	return ""
+}
+
+func credentialsFromEnv() (credentials.Credentials, error) {
 	token := os.Getenv(IAMTokenEnv)
 	if token != "" {
-		return ycsdk.NewIAMTokenCredentials(token), nil
+		return credentials.IAMToken(token), nil
 	}
 
 	token = os.Getenv(OauthTokenEnv)
 	if token != "" {
-		return ycsdk.OAuthToken(token), nil
+		return credentials.OAuthToken(token), nil
 	}
 
 	serviceAccountKeyPath := os.Getenv(ServiceAccountKeyEnv)
@@ -52,8 +156,13 @@ func credentialsFromEnv() (ycsdk.Credentials, error) {
 			return nil, errors.Wrap(err, "malformed service account key json")
 		}
 
-		return ycsdk.ServiceAccountKey(&iamKey)
+		return credentials.ServiceAccountKey(&iamKey)
 	}
 
-	return ycsdk.InstanceServiceAccount(), nil
+	saID := os.Getenv(SAIdEnv)
+	if saID != "" && os.Getenv(SATokenFileEnv) != "" {
+		return &oidcCredentials{saID: saID, getJWT: getJWTFromEnv}, nil
+	}
+
+	return credentials.InstanceServiceAccount(), nil
 }
