@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	iampb "github.com/yandex-cloud/go-genproto/yandex/cloud/iam/v1"
+	"github.com/yandex-cloud/go-sdk/iamkey"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	ycsdk "github.com/yandex-cloud/go-sdk"
-	credentials "github.com/yandex-cloud/go-sdk/v2/credentials"
-	"github.com/yandex-cloud/go-sdk/v2/pkg/iamkey"
 )
 
 const (
@@ -95,12 +97,13 @@ type oidcCredentials struct {
 
 func (c *oidcCredentials) YandexCloudAPICredentials() {}
 
-func (c *oidcCredentials) IAMToken(ctx context.Context) (*credentials.CredentialsToken, error) {
+// IAMToken implements ycsdk.NonExchangeableCredentials for the old SDK.
+func (c *oidcCredentials) IAMToken(ctx context.Context) (*iampb.CreateIamTokenResponse, error) {
 	c.mu.RLock()
 	if c.cachedToken != "" && c.cachedExpiresAt.After(time.Now().Add(oidcRefreshThreshold)) {
 		tok, exp := c.cachedToken, c.cachedExpiresAt
 		c.mu.RUnlock()
-		return &credentials.CredentialsToken{Token: tok, ExpiresAt: exp}, nil
+		return &iampb.CreateIamTokenResponse{IamToken: tok, ExpiresAt: timestamppb.New(exp)}, nil
 	}
 	c.mu.RUnlock()
 
@@ -118,7 +121,7 @@ func (c *oidcCredentials) IAMToken(ctx context.Context) (*credentials.Credential
 	expiresAt := time.Now().Add(time.Duration(expiresIn) * time.Second)
 	c.cachedToken = iamToken
 	c.cachedExpiresAt = expiresAt
-	return &credentials.CredentialsToken{Token: iamToken, ExpiresAt: expiresAt}, nil
+	return &iampb.CreateIamTokenResponse{IamToken: iamToken, ExpiresAt: timestamppb.New(expiresAt)}, nil
 }
 
 func getJWTFromEnv() string {
@@ -131,15 +134,15 @@ func getJWTFromEnv() string {
 	return ""
 }
 
-func credentialsFromEnv() (credentials.Credentials, error) {
+func credentialsFromEnv() (ycsdk.Credentials, error) {
 	token := os.Getenv(IAMTokenEnv)
 	if token != "" {
-		return credentials.IAMToken(token), nil
+		return ycsdk.NewIAMTokenCredentials(token), nil
 	}
 
 	token = os.Getenv(OauthTokenEnv)
 	if token != "" {
-		return credentials.OAuthToken(token), nil
+		return ycsdk.OAuthToken(token), nil
 	}
 
 	serviceAccountKeyPath := os.Getenv(ServiceAccountKeyEnv)
@@ -155,8 +158,7 @@ func credentialsFromEnv() (credentials.Credentials, error) {
 		if err != nil {
 			return nil, errors.Wrap(err, "malformed service account key json")
 		}
-
-		return credentials.ServiceAccountKey(&iamKey)
+		return ycsdk.ServiceAccountKey(&iamKey)
 	}
 
 	saID := os.Getenv(SAIdEnv)
@@ -164,5 +166,5 @@ func credentialsFromEnv() (credentials.Credentials, error) {
 		return &oidcCredentials{saID: saID, getJWT: getJWTFromEnv}, nil
 	}
 
-	return credentials.InstanceServiceAccount(), nil
+	return ycsdk.InstanceServiceAccount(), nil
 }
