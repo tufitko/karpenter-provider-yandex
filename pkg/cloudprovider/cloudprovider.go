@@ -223,7 +223,23 @@ func (c CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 		return nil, fmt.Errorf("getting node group, %w", err)
 	}
 
-	return c.nodeGroupToNodeClaim(ctx, ng, it)
+	// Bound the ProviderID wait inside a single Create reconcile. When the VM isn't ready
+	// yet we don't want to block karpenter-core's launch controller for the full
+	// waitForProviderIDTTL — return a CreateError so karpenter-core sets
+	// ConditionTypeLaunched=Unknown and re-runs Launch via its own rate-limited retry
+	// (CreateFixedNodeGroup is idempotent: the name-guard in pkg/yandex/sdk.go and the
+	// 10 min CachedSDK entry make retries cheap and safe).
+	createCtx, cancel := context.WithTimeout(ctx, createProviderIDTimeout)
+	defer cancel()
+	nc, err := c.nodeGroupToNodeClaim(createCtx, ng, it)
+	if err != nil && (ng.Status == k8s.NodeGroup_PROVISIONING || ng.Status == k8s.NodeGroup_STARTING) {
+		return nil, cloudprovider.NewCreateError(
+			fmt.Errorf("nodegroup %s provider id not ready yet: %w", ng.Id, err),
+			"ProviderIDNotReady",
+			"NodeGroup is still provisioning, will retry",
+		)
+	}
+	return nc, err
 }
 
 // Delete removes a NodeClaim from the cloudprovider by its provider id. Delete should return
@@ -411,7 +427,15 @@ func (c CloudProvider) resolveInstanceTypes(ctx context.Context, nodeClaim *karp
 	return types, nil
 }
 
-const waitForProviderIDTTL = 5 * time.Minute
+const (
+	// waitForProviderIDTTL bounds the ProviderID wait on the Get/List paths, where the NodeClaim
+	// is reported to be in PROVISIONING/STARTING and we poll until the VM registers an instance.
+	waitForProviderIDTTL = 5 * time.Minute
+	// createProviderIDTimeout bounds the ProviderID wait inside a single Create reconcile. If the
+	// VM isn't up within this window we return CreateError (ProviderIDNotReady) and let
+	// karpenter-core retry instead of holding the reconcile open for waitForProviderIDTTL.
+	createProviderIDTimeout = 30 * time.Second
+)
 
 func (c CloudProvider) nodeGroupToNodeClaim(ctx context.Context, ng *k8s.NodeGroup, instanceType *cloudprovider.InstanceType) (*karpv1.NodeClaim, error) {
 	nodeClaim := &karpv1.NodeClaim{}
