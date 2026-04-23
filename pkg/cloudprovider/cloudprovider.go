@@ -39,6 +39,8 @@ import (
 	"github.com/awslabs/operatorpkg/status"
 	"github.com/go-logr/logr"
 	"github.com/samber/lo"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -257,8 +259,10 @@ func (c CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim) 
 
 	err := c.sdk.DeleteNodeGroup(ctx, nodeGroupId)
 	if err != nil {
-		// Check if this is a NotFound error (NodeGroup already deleted by another NodeClaim)
-		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "NotFound") {
+		// NodeGroup already deleted by another NodeClaim / GC path: classify by gRPC
+		// status so a localized or differently-worded error message doesn't slip
+		// through as a generic error and leak a stuck NodeClaim upstream.
+		if isNotFoundError(err) {
 			log.Info("NodeGroup already deleted", "nodeGroupId", nodeGroupId)
 			// Return NodeClaimNotFoundError to signal that the instance is already terminated
 			return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("nodegroup %s not found", nodeGroupId))
@@ -287,8 +291,10 @@ func (c CloudProvider) Get(ctx context.Context, providerID string) (*karpv1.Node
 
 	ng, err := c.sdk.GetNodeGroupByProviderId(ctx, providerID)
 	if err != nil {
-		// Check if this is a NotFound error (instance/nodegroup not found)
-		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "NotFound") {
+		// Classify NotFound via gRPC status (instance/NG deleted out from under us) so
+		// we return a proper NodeClaimNotFoundError regardless of how the server
+		// phrased the message.
+		if isNotFoundError(err) {
 			log.Info("NodeGroup/Instance not found", "providerID", providerID)
 			// Return NodeClaimNotFoundError to signal that the instance is already terminated
 			return nil, cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("instance %s not found", providerID))
@@ -436,6 +442,20 @@ const (
 	// karpenter-core retry instead of holding the reconcile open for waitForProviderIDTTL.
 	createProviderIDTimeout = 30 * time.Second
 )
+
+// isNotFoundError reports whether err is (or wraps) a gRPC NotFound status. We fall back
+// to a substring check for non-gRPC errors (e.g. errors wrapped with fmt.Errorf by our
+// own SDK layer where the underlying grpc.Status was dropped).
+func isNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if grpcstatus.Code(err) == codes.NotFound {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "not found") || strings.Contains(msg, "NotFound")
+}
 
 func (c CloudProvider) nodeGroupToNodeClaim(ctx context.Context, ng *k8s.NodeGroup, instanceType *cloudprovider.InstanceType) (*karpv1.NodeClaim, error) {
 	nodeClaim := &karpv1.NodeClaim{}
