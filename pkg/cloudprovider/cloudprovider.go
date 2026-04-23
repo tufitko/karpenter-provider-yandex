@@ -43,6 +43,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -456,25 +457,31 @@ func (c CloudProvider) nodeGroupToNodeClaim(ctx context.Context, ng *k8s.NodeGro
 		nodeClaim.DeletionTimestamp = &metav1.Time{Time: time.Now()}
 	}
 
-	var lastErr error
-	nodeClaim.Status.ProviderID, lastErr = c.sdk.ProviderIdFor(ctx, ng.Id)
-	if (ng.Status == k8s.NodeGroup_PROVISIONING || ng.Status == k8s.NodeGroup_STARTING) && lastErr != nil {
-		start := time.Now()
-		var providerID string
-
-		// we need to wait while getting providerID, which required to return in Create
-		for ; time.Since(start) < waitForProviderIDTTL; time.Sleep(time.Second) {
-			providerID, lastErr = c.sdk.ProviderIdFor(ctx, ng.Id)
-			if lastErr == nil {
-				nodeClaim.Status.ProviderID = providerID
-				break
+	providerID, lastErr := c.sdk.ProviderIdFor(ctx, ng.Id)
+	if lastErr != nil && (ng.Status == k8s.NodeGroup_PROVISIONING || ng.Status == k8s.NodeGroup_STARTING) {
+		// Poll for the ProviderID while the NodeGroup is still coming up. The loop exits
+		// immediately if ctx is cancelled — otherwise a cancelled reconcile context would
+		// keep calling the Yandex Cloud API and surface
+		//   "rpc error: code = Canceled desc = cancelled received from server"
+		// for the full waitForProviderIDTTL (incident 2026-04-23).
+		pollErr := wait.PollUntilContextTimeout(ctx, time.Second, waitForProviderIDTTL, true, func(ctx context.Context) (bool, error) {
+			id, err := c.sdk.ProviderIdFor(ctx, ng.Id)
+			if err != nil {
+				lastErr = err
+				return false, nil
 			}
+			providerID = id
+			lastErr = nil
+			return true, nil
+		})
+		if pollErr != nil && lastErr == nil {
+			lastErr = pollErr
 		}
 	}
-
-	if nodeClaim.Status.ProviderID == "" {
+	if lastErr != nil || providerID == "" {
 		return nil, fmt.Errorf("failed to determine provider id: %w", lastErr)
 	}
+	nodeClaim.Status.ProviderID = providerID
 
 	return nodeClaim, nil
 }
