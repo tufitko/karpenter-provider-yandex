@@ -60,24 +60,13 @@ func (c CachedSDK) CreateFixedNodeGroup(
 	return resp, err
 }
 
+// DeleteNodeGroup intentionally does not cache results. Caching nil for 10 min meant
+// CloudProvider.Delete kept returning nil on every retry (karpenter-core keeps calling
+// Delete until it sees NodeClaimNotFoundError), so repeated Delete calls for the same
+// NodeClaim never re-checked the NG's real state. Idempotency and rate-limiting are now
+// handled inside YCSDK.DeleteNodeGroup via a status check before issuing the Delete op.
 func (c CachedSDK) DeleteNodeGroup(ctx context.Context, nodeGroupId string) error {
-	var methodName = "DeleteNodeGroup"
-	var key = c.generateMD5CacheKey(methodName, nodeGroupId)
-
-	value, exist := c.cache.Get(key)
-	if exist {
-		if value == nil {
-			return nil
-		}
-		return value.(error)
-	}
-
-	err := c.SDK.DeleteNodeGroup(ctx, nodeGroupId)
-
-	c.cache.Set(key, err, CacheTTL)
-
-	return err
-
+	return c.SDK.DeleteNodeGroup(ctx, nodeGroupId)
 }
 
 func (c CachedSDK) generateMD5CacheKey(method string, args ...string) string {

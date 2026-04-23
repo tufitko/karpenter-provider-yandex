@@ -11,7 +11,6 @@ import (
 	"github.com/tufitko/karpenter-provider-yandex/pkg/apis/v1alpha1"
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1"
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/k8s/v1"
-	"github.com/yandex-cloud/go-genproto/yandex/cloud/operation"
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/vpc/v1"
 	ycsdk "github.com/yandex-cloud/go-sdk"
 	"google.golang.org/grpc/codes"
@@ -246,20 +245,23 @@ func (p *YCSDK) CreateFixedNodeGroup(
 }
 
 func (p *YCSDK) DeleteNodeGroup(ctx context.Context, nodeGroupId string) error {
-	operations, err := p.SDK.Kubernetes().NodeGroup().NodeGroupOperationsIterator(ctx, &k8s.ListNodeGroupOperationsRequest{
-		NodeGroupId: nodeGroupId,
-	}).TakeAll()
+	// Check the NG's current state rather than scanning historical operations.
+	// The previous implementation filtered NodeGroupOperations by TypeUrl containing
+	// "DeleteNodeGroup" and returned nil if any matched — which includes *completed*
+	// deletes, so a caller repeatedly getting nil could never learn the NG is gone
+	// and CloudProvider.Delete never produced NodeClaimNotFoundError.
+	ng, err := p.SDK.Kubernetes().NodeGroup().Get(ctx, &k8s.GetNodeGroupRequest{NodeGroupId: nodeGroupId})
 	if err != nil {
-		return fmt.Errorf("failed to list node group operations: %w", err)
+		// NotFound surfaces as a gRPC codes.NotFound — preserve it so the caller in
+		// CloudProvider.Delete can translate to NodeClaimNotFoundError.
+		if grpcstatus.Code(err) == codes.NotFound {
+			return err
+		}
+		return fmt.Errorf("getting node group before delete: %w", err)
 	}
-
-	operations = lo.Filter(operations, func(item *operation.Operation, _ int) bool {
-		typeURL := item.GetMetadata().GetTypeUrl()
-		return strings.Contains(typeURL, "DeleteNodeGroup")
-	})
-
-	if len(operations) > 0 {
-		// deleting in progress
+	switch ng.GetStatus() {
+	case k8s.NodeGroup_DELETING, k8s.NodeGroup_STOPPING, k8s.NodeGroup_STOPPED:
+		// Deletion already in flight; don't launch a duplicate Delete op.
 		return nil
 	}
 
