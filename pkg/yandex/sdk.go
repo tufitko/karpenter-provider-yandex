@@ -17,7 +17,6 @@ import (
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 	"k8s.io/apimachinery/pkg/api/resource"
-	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 )
 
 type SDK interface {
@@ -221,12 +220,7 @@ func (p *YCSDK) CreateFixedNodeGroup(
 			AutoUpgrade: false,
 		},
 		AllowedUnsafeSysctls: nil,
-		NodeTaints: []*k8s.Taint{{
-			Key:    karpv1.UnregisteredNoExecuteTaint.Key,
-			Value:  karpv1.UnregisteredNoExecuteTaint.Value,
-			Effect: k8s.Taint_NO_EXECUTE,
-		}},
-		NodeLabels: nodeLabels,
+		NodeLabels:           nodeLabels,
 	}))
 	if err != nil {
 		return "", err
